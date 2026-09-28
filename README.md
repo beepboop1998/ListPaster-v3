@@ -1,24 +1,31 @@
 # ListPaster
 
-Copy a multi-line list once, then feed it into any app one item per hotkey
-press — form fields, spreadsheet cells, chat boxes, anywhere you'd otherwise
-copy-paste the same list by hand, item by item.
+**Paste a list one line at a time.** Copy a list (a column from Excel, serial
+numbers, names, IP addresses), then press **Ctrl+Shift+V**. Each press enters
+the next item into whatever field has focus. It's made for data entry into web
+forms, spreadsheets and remote-desktop apps that won't take a bulk paste.
 
-v3 is a class-per-file AutoHotkey v2 rewrite of the original single-file
-script (kept at [`legacy/ListPaster_v2.ahk`](legacy/ListPaster_v2.ahk) as a
-rollback reference), adding list lock, auto-advance, undo, a Type/Paste
-toggle, an always-on-top list window, a number/IP sequence generator, and
-save/resume between runs.
+It's a free, open-source (MIT) AutoHotkey v2 script for Windows.
 
-## Requirements
+## What it's for
 
-- Windows
-- [AutoHotkey v2.0](https://www.autohotkey.com/)
+- **Filling web forms field by field.** Tab auto-advance moves to the next field after each item.
+- **Entering a list down a spreadsheet column, one cell at a time.** Enter auto-advance moves down after each item.
+- **Remote desktop and VDI sessions where clipboard paste is unreliable.** Type mode sends real keystrokes.
+- **Entering generated sequences** such as `Cam-001 … Cam-050` or `192.168.1.100 … 192.168.1.150`, using the built-in generator.
 
-## Usage
+## Quick start
 
-Run [`Main.ahk`](Main.ahk). Copy any multi-line text (2+ non-blank lines) and
-it loads automatically as the current list.
+1. Install [AutoHotkey v2.0](https://www.autohotkey.com/).
+2. Download this repo (**Code → Download ZIP**) and extract it.
+3. Double-click `Main.ahk`.
+4. Copy two or more lines, click into the first field, and press **Ctrl+Shift+V**.
+
+Copying text with two or more lines loads it as the list automatically. Once
+you've started pasting, a new copy won't replace the list until you reach the
+end. Press Ctrl+Alt+L to replace it anyway.
+
+## Hotkeys
 
 | Keys | Action |
 |---|---|
@@ -32,14 +39,23 @@ it loads automatically as the current list.
 | Ctrl+Alt+W | Show/hide the always-on-top list window |
 | Ctrl+Alt+G | Open the number/IP sequence generator |
 
-The list window (Ctrl+Alt+W) shows every item with its status, lets you
-click a row to make it the next item, and right-click a row for Edit,
-Insert above, Add to end, or Delete.
+**Type or Paste:** Type mode (the default) types each item as keystrokes and
+never touches your clipboard. Paste mode puts the item on the clipboard and
+presses Ctrl+V, which works better for long items and in Excel. It restores
+your clipboard afterwards.
 
-Settings, the current list, and your position in it persist across restarts
-in `data\` (created on first run, git-ignored).
+The list window (Ctrl+Alt+W) shows every item and whether it's done. Click a
+row to make it the next item. Right-click a row to edit, insert, add or delete
+items.
+
+Your list, your place in it and your settings are saved in `data\` (created on
+first run) and restored the next time you start ListPaster.
 
 ## Project layout
+
+v3 rewrites the original single-file script as one class per file. The old
+script is kept at [`legacy/ListPaster_v2.ahk`](legacy/ListPaster_v2.ahk) in
+case you need to roll back.
 
 ```
 ListPaster/
@@ -59,15 +75,15 @@ ListPaster/
 - Excel AutoComplete can extend a typed item (typing `Door 1` above an
   existing `Door 10` can commit `Door 10`). Use Paste mode in Excel, or turn
   off AutoComplete (File → Options → Advanced).
-- Enter-advance mode presses Enter after every item — don't use it in forms
+- Enter auto-advance presses Enter after every item, so don't use it in forms
   where Enter submits.
-- Undo assumes the cursor hasn't moved since the paste; clicking elsewhere in
-  the same window before undoing erases at the new spot instead.
-- Undo counts UTF-16 units, so an emoji in an item can over-delete by one
-  character.
+- Undo assumes the cursor hasn't moved since the paste. If you click elsewhere
+  in the same window first, undo erases at the new spot instead.
+- Undo counts characters in UTF-16 units, so an item containing an emoji can
+  over-delete by one character.
 - On Remote Desktop, if Paste mode pastes the previous item, raise
   `PastePreDelayMs` in `data\settings.ini`.
-- Ctrl+Alt+letter equals AltGr+letter on non-US keyboard layouts.
+- On non-US keyboard layouts, Ctrl+Alt+letter is the same as AltGr+letter.
 
 ## License
 
