@@ -46,6 +46,15 @@ class ListWindow {
     Show() {
         if (!IsObject(this._gui) && !this._Build())
             return
+        if this._visible {
+            try {
+                this._gui.Show("NA")                    ; already open: re-applying the saved spot would make it jump
+                WinMoveTop(this._gui.Hwnd)
+            } catch Error as e {
+                this._LogError(A_ThisFunc, e.Message)
+            }
+            return
+        }
         if this._dirty
             this._RenderAll()
         try {

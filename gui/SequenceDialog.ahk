@@ -115,8 +115,8 @@ class SequenceDialog {
         if (result.error != "")
             return
         try {
-            if this._items.IsMidList() {
-                question := "Replace the current list? (" this._items.GetPosition() "/" this._items.GetCount() " done)"
+            if this._items.IsUnfinished() {
+                question := "Replace your unfinished list? (" this._items.GetPosition() " of " this._items.GetCount() " done)"
                 ; Owner = this dialog, so the prompt stays on top of the always-on-top form
                 if (MsgBox(question, Constants.APP_NAME, "YesNo Icon? Default2 Owner" this._gui.Hwnd) != "Yes")
                     return

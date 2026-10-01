@@ -16,6 +16,7 @@
 #Include services\InputSender.ahk
 #Include services\Notifier.ahk
 #Include services\ClipboardService.ahk
+#Include services\WindowProbe.ahk
 #Include services\ItemList.ahk
 #Include services\Settings.ahk
 #Include services\DeliveryService.ahk
@@ -29,11 +30,12 @@ timer      := TimingEngine()
 sender     := InputSender()
 tips       := Notifier(timer)
 clip       := ClipboardService()
+probe      := WindowProbe()
 items      := ItemList()
 prefs      := Settings(A_ScriptDir "\" Constants.SETTINGS_FILE)
-delivery   := DeliveryService(sender, clip, timer, prefs)
+delivery   := DeliveryService(sender, clip, timer, prefs, probe)
 controller := PasteController(items, delivery, clip, tips, prefs)
-store      := ListStore(items, timer, tips, A_ScriptDir "\" Constants.LIST_FILE, A_ScriptDir "\" Constants.SESSION_FILE)
+store      := ListStore(items, timer, tips, prefs, A_ScriptDir "\" Constants.LIST_FILE, A_ScriptDir "\" Constants.SESSION_FILE)
 listWin    := ListWindow(items, prefs, timer)
 seqBuilder := SequenceBuilder()
 seqDialog  := SequenceDialog(items, seqBuilder, tips)
@@ -43,6 +45,7 @@ items.OnChange(ObjBindMethod(controller, "OnListChanged"))
 items.OnChange(ObjBindMethod(store, "OnListChanged"))
 items.OnChange(ObjBindMethod(listWin, "OnListChanged"))
 prefs.OnChange(ObjBindMethod(listWin, "OnSettingsChanged"))
+prefs.OnChange(ObjBindMethod(store, "OnSettingsChanged"))
 
 ; --- Startup (order matters: settings, timer, resume, window, then clipboard monitoring) ---
 A_IconTip := Constants.APP_NAME " v" Constants.VERSION
@@ -51,7 +54,7 @@ timer.Start()
 store.Resume()
 listWin.Start()
 clip.StartMonitoring(ObjBindMethod(controller, "OnClipboardText"))
-OnExit((*) => (store.Flush(), listWin.SaveGeometry(), 0))
+OnExit((*) => (delivery.RestoreNow(), store.Flush(), listWin.SaveGeometry(), 0))    ; must end with 0 or exit is cancelled
 
 ; --- Hotkeys ---
 Hotkey(Constants.HK_PASTE_NEXT, (*) => controller.PasteNext())

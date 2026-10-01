@@ -43,7 +43,6 @@ class Constants {
     static TICK_MS := 50
     static TIP_MS := 1500
     static SAVE_DEBOUNCE_MS := 1000
-    static CLIP_SUPPRESS_MS := 500
     static CLIP_RESTORE_IDLE_MS := 1500
     static CLIP_WAIT_S := 1
     static MENU_FOCUS_DELAY_MS := 300

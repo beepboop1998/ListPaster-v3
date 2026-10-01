@@ -1,16 +1,18 @@
 /*
     PasteController.ahk
-    Responsibility: hotkey and clipboard-event actions (paste, undo, back, reset, load, mode toggles, list lock).
+    Responsibility: user actions from shortcuts, the tray menu and clipboard events (paste, undo, step back, restart,
+                    load, clear, exit, mode switches), and the rule that an unfinished list is never replaced without asking.
     Dependencies: ItemList, DeliveryService, ClipboardService, Notifier, Settings
 */
 class PasteController {
     ; --- Properties ---
     _items := ""        ; ItemList
     _delivery := ""     ; DeliveryService
-    _clip := ""          ; ClipboardService
-    _tips := ""          ; Notifier
-    _prefs := ""         ; Settings
-    _undo := []          ; delivery records, newest last
+    _clip := ""         ; ClipboardService
+    _tips := ""         ; Notifier
+    _prefs := ""        ; Settings
+    _undo := []         ; delivery records, newest last
+    _paused := false    ; while paused, copies are ignored
 
     ; --- Constructor ---
     __New(items, delivery, clip, tips, prefs) {
@@ -25,15 +27,21 @@ class PasteController {
         this._prefs := prefs
     }
 
-    ; --- Public Methods: hotkeys ---
+    ; --- Public Methods: shortcuts ---
     PasteNext() {
-        Critical                                    ; other hotkeys and clipboard events wait until this finishes
+        Critical                                    ; other shortcuts and clipboard events wait until this finishes
         if this._items.IsEmpty() {
-            this._tips.Show("No list loaded. Copy a multi-line list first")
+            this._tips.Show("No list loaded. Copy a list of 2+ lines, or use the tray menu.")
             return
         }
         if this._items.IsFinished() {
-            this._tips.Show("End of list (Ctrl+Alt+R to restart)")
+            count := this._items.GetCount()
+            this._tips.Show("List complete (" count " of " count "). Tray menu → Restart at top to go again.")
+            return
+        }
+        problem := this._delivery.TargetProblem()
+        if (problem != "") {
+            this._tips.Show(problem)
             return
         }
         text := this._items.Peek()
@@ -42,11 +50,11 @@ class PasteController {
             this._tips.Show("Paste failed, see error.log")
             return
         }
-        this._items.Advance()                       ; KIND_ADVANCE keeps the undo stack
+        this._items.Advance()                       ; KIND_ADVANCE keeps the undo history
         this._undo.Push(record)
         pos := this._items.GetPosition()
         count := this._items.GetCount()
-        this._tips.Show(pos " / " count ":  " text (pos = count ? "   (done)" : ""))
+        this._tips.Show(pos " / " count ":  " text (pos = count ? "   (list complete)" : ""))
     }
 
     Undo() {
@@ -71,6 +79,7 @@ class PasteController {
             this._tips.Show("Moved back to " next "/" count ". Erase it manually (" result.reason ")")
     }
 
+    ; --- Public Methods: tray menu and extra shortcuts ---
     Back() {
         if !this._items.StepBack(Constants.KIND_BACK)
             return
@@ -83,13 +92,33 @@ class PasteController {
     }
 
     ForceLoad() {
+        this._delivery.RestoreNow()                 ; NOTE: timers pause while a menu is open, so a pending restore may not have run
         lines := this._items.ParseLines(this._clip.ReadText())
         if !lines.Length {
             this._tips.Show("Clipboard has no text")
             return
         }
+        if !this._MayReplace("Replace")             ; lines were read before asking, so the prompt can't change them
+            return
         this._items.Load(lines)
         this._tips.Show(this._LoadedMessage(lines.Length))
+    }
+
+    ClearList() {
+        if this._items.IsEmpty()
+            return
+        if !this._MayReplace("Clear")
+            return
+        this._items.Load([])
+        this._tips.Show("List cleared")
+    }
+
+    ; True when it's fine to exit; asks first if an unfinished list would be lost.
+    ConfirmExit() {
+        if (!this._items.IsUnfinished() || this._prefs.Get("RememberList") = 1)
+            return true
+        question := "Exit and discard your unfinished list? (" this._DoneText() ")`n`nTo keep lists between restarts, turn on 'Remember list after exit' in the tray menu."
+        return this._tips.Confirm(question)
     }
 
     CycleAdvance() {
@@ -114,11 +143,13 @@ class PasteController {
 
     ; --- Public Methods: events ---
     OnClipboardText(text) {
+        if this._paused
+            return
         lines := this._items.ParseLines(text)
         if (lines.Length < 2)
             return                                  ; single-line copies never replace the list
-        if this._items.IsMidList() {
-            this._tips.Show("List locked at " this._items.GetPosition() "/" this._items.GetCount() ". Ctrl+Alt+L to replace")
+        if this._items.IsUnfinished() {
+            this._tips.Show("Kept your unfinished list (" this._DoneText() "). Tray menu → Load from clipboard replaces it.")
             return
         }
         this._items.Load(lines)
@@ -130,7 +161,19 @@ class PasteController {
             this._undo := []                        ; position moved some other way: old records no longer match
     }
 
+    OnPausedChanged(paused) {
+        this._paused := paused ? true : false
+    }
+
     ; --- Private Methods ---
+    _MayReplace(verb) {
+        if !this._items.IsUnfinished()
+            return true
+        return this._tips.Confirm(verb " your unfinished list? (" this._DoneText() ")")
+    }
+
+    _DoneText() => this._items.GetPosition() " of " this._items.GetCount() " done"
+
     _LoadedMessage(count) {
         return "Loaded " count (count = 1 ? " item" : " items")
     }
