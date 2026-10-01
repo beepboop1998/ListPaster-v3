@@ -3,11 +3,10 @@
 
 /*
     Main.ahk
-    Responsibility: Wire ListPaster v3 dependencies, start services, register hotkeys. No logic.
+    Responsibility: Wire ListPaster's dependencies, start services, register shortcuts and the tray menu. No logic.
     Dependencies: every module below
-    Hotkeys: Ctrl+Shift+V paste next | Ctrl+Alt+Z undo | Ctrl+Alt+B back | Ctrl+Alt+R restart |
-             Ctrl+Alt+L force-load | Ctrl+Alt+A auto-advance | Ctrl+Alt+P Type/Paste |
-             Ctrl+Alt+W list window | Ctrl+Alt+G sequence generator
+    Shortcuts: Ctrl+Shift+V paste next | Ctrl+Alt+Z undo (left Alt). Everything else is in the tray menu;
+               "Extra hotkeys" there adds Ctrl+Alt+B/R/L/A/P/W/G.
 */
 
 #Include Constants.ahk
@@ -22,8 +21,10 @@
 #Include services\DeliveryService.ahk
 #Include services\PasteController.ahk
 #Include services\ListStore.ahk
+#Include services\HotkeyManager.ahk
 #Include gui\ListWindow.ahk
 #Include gui\SequenceDialog.ahk
+#Include gui\TrayMenu.ahk
 
 ; --- Instances (names must not equal class names: AHK v2 names are case-insensitive) ---
 timer      := TimingEngine()
@@ -39,30 +40,47 @@ store      := ListStore(items, timer, tips, prefs, A_ScriptDir "\" Constants.LIS
 listWin    := ListWindow(items, prefs, timer)
 seqBuilder := SequenceBuilder()
 seqDialog  := SequenceDialog(items, seqBuilder, tips)
+hotkeys    := HotkeyManager(prefs, tips)
+actions    := Map(
+    "show",     (*) => listWin.Show(),
+    "generate", (*) => seqDialog.Show(),
+    "load",     (*) => controller.ForceLoad(),
+    "back",     (*) => controller.Back(),
+    "restart",  (*) => controller.Reset(),
+    "clear",    (*) => controller.ClearList(),
+    "exit",     (*) => controller.ConfirmExit() && ExitApp()
+)
+tray       := TrayMenu(items, prefs, hotkeys, timer, actions)
 
 ; --- Event wiring ---
 items.OnChange(ObjBindMethod(controller, "OnListChanged"))
 items.OnChange(ObjBindMethod(store, "OnListChanged"))
 items.OnChange(ObjBindMethod(listWin, "OnListChanged"))
+items.OnChange(ObjBindMethod(tray, "OnListChanged"))
 prefs.OnChange(ObjBindMethod(listWin, "OnSettingsChanged"))
 prefs.OnChange(ObjBindMethod(store, "OnSettingsChanged"))
+prefs.OnChange(ObjBindMethod(hotkeys, "OnSettingsChanged"))
+prefs.OnChange(ObjBindMethod(tray, "OnSettingsChanged"))
+hotkeys.OnPausedChanged(ObjBindMethod(controller, "OnPausedChanged"))
+hotkeys.OnPausedChanged(ObjBindMethod(tray, "OnPausedChanged"))
 
-; --- Startup (order matters: settings, timer, resume, window, then clipboard monitoring) ---
-A_IconTip := Constants.APP_NAME " v" Constants.VERSION
+; --- Shortcuts (core = always on; extra = only while "Extra hotkeys" is ticked in the tray menu) ---
+hotkeys.Add(Constants.HK_PASTE_NEXT, "Paste next", (*) => controller.PasteNext(), "core")
+hotkeys.Add(Constants.HK_UNDO, "Undo last paste", (*) => controller.Undo(), "core")
+hotkeys.Add(Constants.HK_BACK, "Step back", (*) => controller.Back(), "extra")
+hotkeys.Add(Constants.HK_RESET, "Restart at top", (*) => controller.Reset(), "extra")
+hotkeys.Add(Constants.HK_FORCE_LOAD, "Load from clipboard", (*) => controller.ForceLoad(), "extra")
+hotkeys.Add(Constants.HK_CYCLE_ADVANCE, "Cycle auto-advance", (*) => controller.CycleAdvance(), "extra")
+hotkeys.Add(Constants.HK_TOGGLE_DELIVERY, "Switch Type/Paste", (*) => controller.ToggleDelivery(), "extra")
+hotkeys.Add(Constants.HK_TOGGLE_WINDOW, "Show/hide list window", (*) => listWin.Toggle(), "extra")
+hotkeys.Add(Constants.HK_SEQUENCE, "Generate list", (*) => seqDialog.Show(), "extra")
+
+; --- Startup (order matters: settings, timer, saved list, window, shortcuts, tray, then clipboard monitoring) ---
 prefs.Load()
 timer.Start()
 store.Resume()
 listWin.Start()
+hotkeys.RegisterAll()
+tray.Start()
 clip.StartMonitoring(ObjBindMethod(controller, "OnClipboardText"))
 OnExit((*) => (delivery.RestoreNow(), store.Flush(), listWin.SaveGeometry(), 0))    ; must end with 0 or exit is cancelled
-
-; --- Hotkeys ---
-Hotkey(Constants.HK_PASTE_NEXT, (*) => controller.PasteNext())
-Hotkey(Constants.HK_UNDO, (*) => controller.Undo())
-Hotkey(Constants.HK_BACK, (*) => controller.Back())
-Hotkey(Constants.HK_RESET, (*) => controller.Reset())
-Hotkey(Constants.HK_FORCE_LOAD, (*) => controller.ForceLoad())
-Hotkey(Constants.HK_CYCLE_ADVANCE, (*) => controller.CycleAdvance())
-Hotkey(Constants.HK_TOGGLE_DELIVERY, (*) => controller.ToggleDelivery())
-Hotkey(Constants.HK_TOGGLE_WINDOW, (*) => listWin.Toggle())
-Hotkey(Constants.HK_SEQUENCE, (*) => seqDialog.Show())

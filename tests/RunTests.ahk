@@ -19,6 +19,8 @@
 #Include %A_ScriptDir%\..\services\DeliveryService.ahk
 #Include %A_ScriptDir%\..\services\PasteController.ahk
 #Include %A_ScriptDir%\..\services\ListStore.ahk
+#Include %A_ScriptDir%\..\services\HotkeyManager.ahk
+#Include %A_ScriptDir%\..\gui\TrayMenu.ahk
 
 OnError(ReportUncaught)
 ResetTestFiles()
@@ -34,6 +36,8 @@ RunTest("A8 Repeated presses", Test_A8_RepeatedPresses)
 RunTest("A9 Replacing an unfinished list", Test_A9_UnfinishedList)
 RunTest("A10 Settings", Test_A10_Settings)
 RunTest("A11 Persistence", Test_A11_Persistence)
+RunTest("A12 Shortcuts", Test_A12_Shortcuts)
+RunTest("A13 Tray state", Test_A13_TrayState)
 RunTest("A14 Generator", Test_A14_Generator)
 RunTest("A15 Clipboard ownership and history markers", Test_A15_ClipboardOwnership)
 
@@ -412,6 +416,117 @@ Test_A11_Persistence() {
     Assert.Eq(FileExist(paths.list) ? 1 : 0, 0, "a save that was already queued writes nothing once Remember is off")
 }
 
+Test_A12_Shortcuts() {
+    tips := FakeTips()
+    prefs := NewPrefs()
+    hk := HotkeyManager(prefs, tips)
+    Assert.Eq(hk.Describe("^+v"), "Ctrl+Shift+V", "Ctrl+Shift+V is described plainly")
+    Assert.Eq(hk.Describe("^<!z"), "Ctrl+Alt+Z", "left-Alt shortcuts are described as Ctrl+Alt")
+    Assert.Eq(hk.Describe("F13"), "F13", "a plain key keeps its name")
+
+    ; F13/F14 don't exist on normal keyboards, so the test can't steal a real shortcut
+    hk.Add("F13", "Test core", (*) => 0, "core")
+    hk.Add("NotAKey", "Broken shortcut", (*) => 0, "core")
+    hk.Add("F14", "Test extra", (*) => 0, "extra")
+    hk.Add("NotAKey2", "Broken extra", (*) => 0, "extra")
+    hk.RegisterAll()
+    Assert.Eq(tips.alerts.Length, 1, "all registration problems are reported in one message")
+    msg := tips.alerts.Length ? tips.alerts[1] : ""
+    Assert.Contains(msg, "Broken shortcut (NotAKey): unavailable until fixed", "a broken core shortcut is named and marked unavailable")
+    Assert.Contains(msg, "Broken extra (NotAKey2): still in the tray menu", "a broken extra shortcut points to the tray")
+    Assert.Eq(InStr(msg, "Test core"), 0, "shortcuts that work aren't listed")
+
+    prefs.OnChange(ObjBindMethod(hk, "OnSettingsChanged"))
+    prefs.Set("ExtraHotkeys", 1)
+    prefs.Set("ExtraHotkeys", 0)
+    Assert.Eq(tips.alerts.Length, 1, "turning Extra hotkeys on and off raises no new problems")
+
+    heard := []
+    hk.OnPausedChanged((paused) => heard.Push(paused))
+    hk.SetPaused(true)
+    Assert.Eq(A_IsSuspended "/" hk.IsPaused(), "1/1", "pausing suspends every shortcut")
+    hk.SetPaused(true)
+    Assert.Eq(heard.Length, 1, "pausing twice notifies once")
+    hk.TogglePaused()
+    Assert.Eq(A_IsSuspended "/" hk.IsPaused() "/" Join(heard), "0/0/1|0", "resuming turns the shortcuts back on and notifies")
+}
+
+Test_A13_TrayState() {
+    Assert.Eq(StrLen("·") "/" StrLen("—"), "1/1", "script files are read as UTF-8, so menu symbols show correctly")
+    env := NewTrayEnv()
+    cfg := {advance: "Tab", mode: "Type", extra: 0, showNext: 0, remember: 0}
+
+    st := env.tray.BuildState({count: 0, position: 0, next: ""}, cfg, false, false)
+    Assert.Eq(st.status, "No list loaded", "status with no list")
+    Assert.Eq(st.enabled["back"] "" st.enabled["restart"] "" st.enabled["clear"], "000", "Step back, Restart and Clear are greyed with no list")
+    Assert.Eq(st.tip, "ListPaster — No list loaded", "tooltip with no list")
+
+    st := env.tray.BuildState({count: 10, position: 4, next: "Cam-005"}, cfg, false, false)
+    Assert.Eq(st.status, "Next: 5 of 10 · Tab · Type", "mid-list status shows the next item number and both modes")
+    Assert.Eq(st.enabled["back"] "" st.enabled["restart"] "" st.enabled["clear"], "111", "everything is enabled mid-list")
+    Assert.Eq(InStr(st.tip, "Cam-005"), 0, "the next item is hidden from the tooltip by default")
+    Assert.Eq(st.advance "/" st.mode "/" st.pauseText, "Tab/Type/Pause ListPaster", "radio choices and pause item follow the state")
+
+    st := env.tray.BuildState({count: 10, position: 0, next: "Cam-001"}, cfg, false, false)
+    Assert.Eq(st.enabled["back"] "" st.enabled["restart"] "" st.enabled["clear"], "001", "Step back and Restart are greyed at the first item")
+    st := env.tray.BuildState({count: 10, position: 10, next: ""}, cfg, false, false)
+    Assert.Eq(st.status, "List complete (10 of 10)", "status at the end of the list")
+    st := env.tray.BuildState({count: 10, position: 4, next: "Cam-005"}, cfg, true, false)
+    Assert.Eq(st.status "/" st.pauseText, "Paused — Next: 5 of 10 · Tab · Type/Resume ListPaster", "paused shows first and the item reads Resume")
+
+    cfg.showNext := 1
+    st := env.tray.BuildState({count: 10, position: 4, next: "A&B`tcol2"}, cfg, false, false)
+    Assert.Contains(st.tip, "`nNext item: A&B col2", "next item shows when turned on; tabs become spaces; & kept on Windows 11")
+    st := env.tray.BuildState({count: 10, position: 4, next: "A&B"}, cfg, false, true)
+    Assert.Contains(st.tip, "A&&&B", "& is escaped on Windows 10 and earlier")
+    long := ""
+    loop 300
+        long .= "x"
+    st := env.tray.BuildState({count: 10, position: 4, next: long}, cfg, false, false)
+    Assert.Eq(StrLen(st.tip) <= Constants.TRAY_TIP_MAX, 1, "the tooltip never exceeds 127 characters")
+    amps := ""
+    loop 200
+        amps .= "&"
+    st := env.tray.BuildState({count: 10, position: 4, next: amps}, cfg, false, true)
+    trailing := StrLen(st.tip) - StrLen(RTrim(st.tip, "&"))
+    Assert.Eq(Mod(trailing, 3) "/" (StrLen(st.tip) <= Constants.TRAY_TIP_MAX), "0/1", "cutting to 127 never leaves half an escaped &")
+    cfg.extra := 1
+    cfg.remember := 1
+    st := env.tray.BuildState({count: 0, position: 0, next: ""}, cfg, false, false)
+    Assert.Eq(st.checks["ExtraHotkeys"] "" st.checks["ShowNextInTooltip"] "" st.checks["RememberList"], "111", "tick marks follow the settings")
+
+    ; The real menu, read back from Windows
+    env.items.Load(["a", "b", "c"])
+    env.tray.Start()
+    hMenu := A_TrayMenu.Handle
+    Assert.Eq(DllCall("GetMenuItemCount", "Ptr", hMenu), 18, "the tray menu has the planned 18 entries (separators included)")
+    Assert.Eq(MenuText(hMenu, 0) "/" MenuGreyed(hMenu, 0), "Next: 1 of 3 · None · Type/1", "the first item is the greyed status line")
+    Assert.Eq(MenuGreyed(hMenu, 5) "/" MenuGreyed(hMenu, 6) "/" MenuGreyed(hMenu, 7), "1/1/0", "Step back and Restart are greyed at item 1; Clear is not")
+    Assert.Eq(MenuText(hMenu, 16) "/" MenuText(hMenu, 17), "Pause ListPaster/Exit", "Pause and Exit are at the bottom")
+    Assert.Eq(A_TrayMenu.Default, "Show list window", "double-clicking the icon opens the list window")
+
+    env.items.Advance()
+    Assert.True(env.timer.Has("trayRefresh"), "a paste schedules a tray refresh instead of redrawing inside the paste")
+    env.timer.Run("trayRefresh")
+    Assert.Eq(MenuText(hMenu, 0) "/" MenuGreyed(hMenu, 5), "Next: 2 of 3 · None · Type/0", "after a paste the status updates and Step back is enabled")
+
+    env.tray._OnToggle("RememberList")
+    env.timer.Run("trayRefresh")
+    Assert.Eq(env.prefs.Get("RememberList") "/" MenuChecked(hMenu, 14), "1/1", "a toggle item flips its setting and shows a tick")
+    env.tray._OnAdvance("Enter")
+    env.tray._OnMode("Paste")
+    Assert.Eq(env.prefs.Get("AdvanceMode") "/" env.prefs.Get("DeliveryMode"), "Enter/Paste", "the radio items change their settings")
+    env.tray.OnPausedChanged(true)
+    env.hk.SetPaused(true)
+    env.timer.Run("trayRefresh")
+    Assert.Eq(MenuText(hMenu, 0), "Paused — Next: 2 of 3 · Enter · Paste", "the status line shows paused and the new modes")
+    Assert.Eq(MenuText(hMenu, 16), "Resume ListPaster", "the pause item becomes Resume")
+    env.hk.SetPaused(false)
+    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+        env.tray._OnAction(id)
+    Assert.Eq(Join(env.ran), "show|generate|load|back|restart|clear|exit", "every menu action runs its callback")
+}
+
 Test_A14_Generator() {
     gen := SequenceBuilder()
     res := gen.BuildNumbers("Cam-{n}", "1", "10", "1", "3")
@@ -495,6 +610,31 @@ NewDeliveryEnv() {
     env.dlv := DeliveryService(env.sender, env.clip, env.timer, env.prefs, env.probe)
     return env
 }
+
+NewTrayEnv() {
+    env := {}
+    env.items := ItemList()
+    env.prefs := NewPrefs()
+    env.hk := HotkeyManager(env.prefs, FakeTips())
+    env.timer := FakeTimer()
+    env.ran := []
+    env.actions := Map()
+    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+        env.actions[id] := ObjBindMethod(env.ran, "Push", id)
+    env.tray := TrayMenu(env.items, env.prefs, env.hk, env.timer, env.actions)
+    env.items.OnChange(ObjBindMethod(env.tray, "OnListChanged"))
+    env.prefs.OnChange(ObjBindMethod(env.tray, "OnSettingsChanged"))
+    return env
+}
+
+MenuText(hMenu, pos) {
+    buf := Buffer(1024, 0)
+    DllCall("GetMenuStringW", "Ptr", hMenu, "UInt", pos, "Ptr", buf, "Int", 512, "UInt", 0x400)   ; MF_BYPOSITION
+    return StrGet(buf, "UTF-16")
+}
+
+MenuGreyed(hMenu, pos) => (DllCall("GetMenuState", "Ptr", hMenu, "UInt", pos, "UInt", 0x400, "UInt") & 0x3) ? 1 : 0
+MenuChecked(hMenu, pos) => (DllCall("GetMenuState", "Ptr", hMenu, "UInt", pos, "UInt", 0x400, "UInt") & 0x8) ? 1 : 0
 
 StorePaths() {
     static count := 0
