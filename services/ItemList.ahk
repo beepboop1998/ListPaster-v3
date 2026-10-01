@@ -32,6 +32,7 @@ class ItemList {
     IsEmpty() => this._items.Length = 0
     IsFinished() => this._items.Length > 0 && this._index >= this._items.Length
     IsMidList() => this._index > 0 && this._index < this._items.Length
+    IsUnfinished() => this._items.Length > 0 && this._index < this._items.Length    ; includes not started
     ToArray() => this._items.Clone()
 
     Load(lines) {

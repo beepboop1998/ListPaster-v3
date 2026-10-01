@@ -5,7 +5,7 @@
 */
 class Constants {
     static APP_NAME := "ListPaster"
-    static VERSION := "3.0"
+    static VERSION := "3.1"
 
     ; --- Files (relative to A_ScriptDir) ---
     static ERROR_LOG := "error.log"
@@ -13,16 +13,16 @@ class Constants {
     static LIST_FILE := "data\list.txt"
     static SESSION_FILE := "data\session.ini"
 
-    ; --- Hotkeys ---
+    ; --- Hotkeys (<! = left Alt only, so AltGr+letter still types characters like ż) ---
     static HK_PASTE_NEXT := "^+v"
-    static HK_UNDO := "^!z"
-    static HK_BACK := "^!b"
-    static HK_RESET := "^!r"
-    static HK_FORCE_LOAD := "^!l"
-    static HK_CYCLE_ADVANCE := "^!a"
-    static HK_TOGGLE_DELIVERY := "^!p"
-    static HK_TOGGLE_WINDOW := "^!w"
-    static HK_SEQUENCE := "^!g"
+    static HK_UNDO := "^<!z"
+    static HK_BACK := "^<!b"
+    static HK_RESET := "^<!r"
+    static HK_FORCE_LOAD := "^<!l"
+    static HK_CYCLE_ADVANCE := "^<!a"
+    static HK_TOGGLE_DELIVERY := "^<!p"
+    static HK_TOGGLE_WINDOW := "^<!w"
+    static HK_SEQUENCE := "^<!g"
 
     ; --- Modes ---
     static ADVANCE_MODES := ["None", "Tab", "Enter"]
@@ -47,6 +47,7 @@ class Constants {
     static CLIP_RESTORE_IDLE_MS := 1500
     static CLIP_WAIT_S := 1
     static MENU_FOCUS_DELAY_MS := 300
+    static FOCUS_RECORD_DELAY_MS := 100
 
     ; --- Settings defaults (key -> default) ---
     static SETTINGS_DEFAULTS := Map(
@@ -58,11 +59,24 @@ class Constants {
         "WindowX", "",
         "WindowY", "",
         "WindowW", 380,
-        "WindowH", 420
+        "WindowH", 420,
+        "ExtraHotkeys", 0,
+        "ShowNextInTooltip", 0,
+        "RememberList", 0
     )
 
     ; --- Windows where Undo uses spreadsheet keys (WinTitle, default match mode 2 = contains) ---
     static SHEET_WINDOWS := ["ahk_exe EXCEL.EXE", "Google Sheets", "LibreOffice Calc"]
+
+    ; --- Windows shell surfaces Paste next refuses to type into ---
+    static SHELL_CLASSES := ["Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow",
+        "TopLevelWindowForOverflowXamlIsland", "XamlExplorerHostIslandWindow", "Progman", "WorkerW"]   ; only when owned by explorer.exe
+    static SHELL_PROCESSES := ["StartMenuExperienceHost.exe", "SearchHost.exe", "SearchApp.exe",
+        "SearchUI.exe", "ShellExperienceHost.exe"]
+
+    ; --- Tray ---
+    static TRAY_TIP_MAX := 127                ; Windows shows only the first 127 characters
+    static FIRST_WIN11_BUILD := "10.0.22000"  ; tray tooltips need "&" escaped before this
 
     ; --- Sequence generator ---
     static SEQ_MAX_ITEMS := 10000

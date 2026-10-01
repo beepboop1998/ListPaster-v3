@@ -1,6 +1,6 @@
 /*
     Notifier.ahk
-    Responsibility: shows a tooltip and hides it later via TimingEngine.
+    Responsibility: user-facing messages: tooltips (hidden later via TimingEngine), yes/no questions and alerts.
     Dependencies: TimingEngine
 */
 class Notifier {
@@ -27,6 +27,25 @@ class Notifier {
             return
         }
         this._timer.After("tipHide", durationMs, this._hideFn)
+    }
+
+    ; Yes/No question, No is the default. Returns true only for Yes (false if the box can't be shown).
+    ; NOTE: 262144 = always on top, so the box can't open hidden behind the app being pasted into.
+    Confirm(question) {
+        try {
+            return MsgBox(question, Constants.APP_NAME, "YesNo Icon? Default2 262144") = "Yes"
+        } catch Error as e {
+            this._LogError(A_ThisFunc, e.Message)
+            return false
+        }
+    }
+
+    Alert(message) {
+        try {
+            MsgBox(message, Constants.APP_NAME, "Iconi 262144")
+        } catch Error as e {
+            this._LogError(A_ThisFunc, e.Message)
+        }
     }
 
     ; --- Private Methods ---
