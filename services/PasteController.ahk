@@ -117,10 +117,6 @@ class PasteController {
         lines := this._items.ParseLines(text)
         if (lines.Length < 2)
             return                                  ; single-line copies never replace the list
-        if this._items.IsMidList() {
-            this._tips.Show("List locked at " this._items.GetPosition() "/" this._items.GetCount() ". Ctrl+Alt+L to replace")
-            return
-        }
         this._items.Load(lines)
         this._tips.Show(this._LoadedMessage(lines.Length))
     }
