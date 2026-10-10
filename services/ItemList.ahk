@@ -34,6 +34,16 @@ class ItemList {
     IsMidList() => this._index > 0 && this._index < this._items.Length
     ToArray() => this._items.Clone()
 
+    HasSameItems(lines) {                 ; case-sensitive, same order
+        if (lines.Length != this._items.Length)
+            return false
+        for i, line in lines {
+            if !(line == this._items[i])
+                return false
+        }
+        return true
+    }
+
     Load(lines) {
         this._items := lines.Clone()
         this._index := 0

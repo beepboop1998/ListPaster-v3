@@ -117,6 +117,10 @@ class PasteController {
         lines := this._items.ParseLines(text)
         if (lines.Length < 2)
             return                                  ; single-line copies never replace the list
+        if this._items.HasSameItems(lines) {        ; re-copy, or Paste mode's late clipboard restore: keep the place
+            this._tips.Show("Same list, still at " this._items.GetPosition() "/" this._items.GetCount() ". Ctrl+Alt+R to restart")
+            return
+        }
         this._items.Load(lines)
         this._tips.Show(this._LoadedMessage(lines.Length))
     }
