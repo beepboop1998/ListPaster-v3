@@ -5,7 +5,7 @@
 */
 class Constants {
     static APP_NAME := "ListPaster"
-    static VERSION := "3.1"
+    static VERSION := "3.1.1"
 
     ; --- Files (relative to A_ScriptDir) ---
     static ERROR_LOG := "error.log"
@@ -47,6 +47,10 @@ class Constants {
     static CLIP_RESTORE_IDLE_MS := 1500
     static CLIP_WAIT_S := 1
     static MENU_FOCUS_DELAY_MS := 300
+    static MODIFIER_WAIT_MS := 1000
+
+    ; --- Modifiers our hotkeys use; InputSender waits for them to be released before sending ---
+    static HOTKEY_MODIFIERS := ["Ctrl", "Shift", "Alt"]
 
     ; --- Settings defaults (key -> default) ---
     static SETTINGS_DEFAULTS := Map(

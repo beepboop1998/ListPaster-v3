@@ -39,6 +39,10 @@ the list, and copying the same list again keeps your place.
 | Ctrl+Alt+W | Show/hide the always-on-top list window |
 | Ctrl+Alt+G | Open the number/IP sequence generator |
 
+Items are sent once you let go of Ctrl, Shift and Alt (or after a second if you
+keep holding them), so a modifier isn't left stuck down. Holding Ctrl+Shift and
+tapping V several times still enters one item per tap.
+
 **Type or Paste:** Type mode (the default) types each item as keystrokes and
 never touches your clipboard. Paste mode puts the item on the clipboard and
 presses Ctrl+V, which works better for long items and in Excel. It restores
