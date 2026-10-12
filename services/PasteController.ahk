@@ -1,6 +1,6 @@
 /*
     PasteController.ahk
-    Responsibility: hotkey and clipboard-event actions (paste, undo, back, reset, load, mode toggles, list lock).
+    Responsibility: hotkey and clipboard-event actions (paste, undo, back, reset, load, mode toggles).
     Dependencies: ItemList, DeliveryService, ClipboardService, Notifier, Settings
 */
 class PasteController {

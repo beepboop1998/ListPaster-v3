@@ -21,9 +21,9 @@ It's a free, open-source (MIT) AutoHotkey v2 script for Windows.
 3. Double-click `Main.ahk`.
 4. Copy two or more lines, click into the first field, and press **Ctrl+Shift+V**.
 
-Copying text with two or more lines loads it as the list automatically. Once
-you've started pasting, a new copy won't replace the list until you reach the
-end. Press Ctrl+Alt+L to replace it anyway.
+Copying text with two or more lines loads it as the list automatically and
+replaces the current one, even mid-list. Copying a single line never replaces
+the list, and copying the same list again keeps your place.
 
 ## Hotkeys
 
@@ -33,7 +33,7 @@ end. Press Ctrl+Alt+L to replace it anyway.
 | Ctrl+Alt+Z | Undo last paste |
 | Ctrl+Alt+B | Step back one |
 | Ctrl+Alt+R | Restart at top |
-| Ctrl+Alt+L | Force-load clipboard as the list (even mid-list, even a single line) |
+| Ctrl+Alt+L | Force-load clipboard as the list from the top (even a single line, even the same list) |
 | Ctrl+Alt+A | Cycle auto-advance: None → Tab → Enter |
 | Ctrl+Alt+P | Toggle delivery mode: Type ↔ Paste |
 | Ctrl+Alt+W | Show/hide the always-on-top list window |
