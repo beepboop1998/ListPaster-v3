@@ -37,6 +37,15 @@ class DeliveryService {
         return "Click into the field you want to fill first."
     }
 
+    ; "" once the shortcut's keys are released; otherwise a message for the user.
+    ; NOTE: if Ctrl/Shift are still held when the text is sent, AutoHotkey presses them again at the end of the
+    ; send. Let go mid-send while another program has a keyboard hook (Discord, overlays...) and they stay stuck.
+    HeldKeysProblem(hotkey) {
+        if this._sender.WaitForKeysUp(hotkey, Constants.KEY_RELEASE_WAIT_S)
+            return ""
+        return "Let go of all keys, then try again. (If Ctrl or Shift seems stuck, tap it.)"
+    }
+
     ; Pure: "" = fine, "none" = no active window, "self" = a ListPaster window or menu, "shell" = taskbar/Start/desktop.
     ClassifyTarget(info, ownPid) {
         if (!IsObject(info) || !info.hwnd)

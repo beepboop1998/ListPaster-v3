@@ -67,8 +67,9 @@ ListPaster's own windows, the taskbar, or the desktop; it tells you to click int
   exactly. A row copied from several spreadsheet columns stays one item with tabs in it: Type mode presses
   Tab between the parts, and Paste mode pastes the tabs (which fills the cells next to it in Excel).
 - **Each Ctrl+Shift+V advances by one**, only once the item was handed to Windows without error. Quick
-  repeated presses each insert one item, in order. Holding the keys down repeats like any key, so release
-  between presses.
+  repeated presses each insert one item, in order. The item is typed the moment you let go of the keys, so
+  Ctrl and Shift can't be left stuck down. Hold them longer than 3 seconds and nothing is typed (Undo works
+  the same way).
 - **At the end** you'll see *List complete (10 of 10)*. It never wraps around; use *Restart at top* to go again.
 - **The list window** shows every item and whether it's done. Click a row to make it the next item.
   Right-click a row to edit, insert, add or delete items.

@@ -13,6 +13,7 @@
 
 #Include %A_ScriptDir%\..\Constants.ahk
 #Include %A_ScriptDir%\..\lib\SequenceBuilder.ahk
+#Include %A_ScriptDir%\..\services\InputSender.ahk
 #Include %A_ScriptDir%\..\services\ItemList.ahk
 #Include %A_ScriptDir%\..\services\Settings.ahk
 #Include %A_ScriptDir%\..\services\ClipboardService.ahk
@@ -40,6 +41,7 @@ RunTest("A12 Shortcuts", Test_A12_Shortcuts)
 RunTest("A13 Tray state", Test_A13_TrayState)
 RunTest("A14 Generator", Test_A14_Generator)
 RunTest("A15 Clipboard ownership and history markers", Test_A15_ClipboardOwnership)
+RunTest("A16 Shortcut keys released before sending", Test_A16_HeldKeys)
 
 Finish()
 
@@ -576,6 +578,40 @@ Test_A15_ClipboardOwnership() {
     Assert.Eq(buf.Size, offset + 4, "no stray bytes after the end marker")
 }
 
+Test_A16_HeldKeys() {
+    env := NewControllerEnv()
+    env.items.Load(["a", "b"])
+    env.delivery.held := "Let go of all keys, then try again."
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(env.delivery.delivered.Length, 0, "nothing is typed while the shortcut's keys are still held")
+    Assert.Eq(env.items.GetPosition(), 0, "a paste refused for held keys doesn't advance")
+    Assert.Eq(env.tips.Last(), env.delivery.held, "and says to let go")
+    Assert.Eq(Join(env.delivery.heldHotkeys), "$^+v", "the shortcut that fired is the one waited on")
+    env.delivery.held := ""
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(Join(env.delivery.delivered), "a", "once the keys are up, the item is typed")
+
+    env.delivery.held := "Let go of all keys, then try again."
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(env.delivery.erased.Length, 0, "undo erases nothing while the keys are held")
+    Assert.Eq(env.items.GetPosition(), 1, "and keeps the position and the undo history")
+    env.delivery.held := ""
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(Join(env.delivery.erased), "a", "undo works once the keys are up")
+
+    dEnv := NewDeliveryEnv()
+    Assert.Eq(dEnv.dlv.HeldKeysProblem("$^+v"), "", "no problem when the keys come up in time")
+    Assert.Eq(dEnv.sender.LastCall(), "wait:$^+v/" Constants.KEY_RELEASE_WAIT_S, "delivery waits on the shortcut with the set timeout")
+    dEnv.sender.keysHeld := true
+    Assert.Contains(dEnv.dlv.HeldKeysProblem("$^+v"), "Let go of all keys", "keys still down after the wait give a message")
+
+    snd := InputSender()
+    Assert.Eq(Join(snd.KeysToRelease("$^+v")), "Ctrl|Alt|Shift|LWin|RWin|v", "Ctrl+Shift+V waits on every modifier and V")
+    Assert.Eq(Join(snd.KeysToRelease("$^<!z")), "Ctrl|Alt|Shift|LWin|RWin|z", "left-Alt prefixes are stripped")
+    Assert.Eq(Join(snd.KeysToRelease("")), "Ctrl|Alt|Shift|LWin|RWin", "with no shortcut only the modifiers are waited on")
+    Assert.Eq(snd.WaitForKeysUp("$^+NotAKey", 1), 0, "an unknown key name fails safely instead of typing")
+}
+
 ; =====================================================================================
 ; Builders
 ; =====================================================================================
@@ -656,6 +692,11 @@ Join(arr, sep := "|") {
 class FakeSender {
     calls := []
     failType := false
+    keysHeld := false
+    WaitForKeysUp(hotkey, timeoutS) {
+        this.calls.Push("wait:" hotkey "/" timeoutS)
+        return !this.keysHeld
+    }
     TypeText(text) {
         if (text = "")
             return false
@@ -762,10 +803,16 @@ class FakeDelivery {
     eraseResult := ""
     restoreText := ""
     restoreNowCalls := 0
+    held := ""
+    heldHotkeys := []
     __New(clip := "") {
         this.clip := clip
     }
     TargetProblem() => this.problem
+    HeldKeysProblem(hotkey) {
+        this.heldHotkeys.Push(hotkey)
+        return this.held
+    }
     Deliver(text, advanceMode, deliveryMode) {
         if this.failNext {
             this.failNext := false

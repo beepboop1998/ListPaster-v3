@@ -5,7 +5,7 @@
 */
 class Constants {
     static APP_NAME := "ListPaster"
-    static VERSION := "3.1"
+    static VERSION := "3.2"
 
     ; --- Files (relative to A_ScriptDir) ---
     static ERROR_LOG := "error.log"
@@ -47,6 +47,7 @@ class Constants {
     static CLIP_WAIT_S := 1
     static MENU_FOCUS_DELAY_MS := 300
     static FOCUS_RECORD_DELAY_MS := 100
+    static KEY_RELEASE_WAIT_S := 3           ; how long Paste next / Undo wait for you to let go of the shortcut
 
     ; --- Settings defaults (key -> default) ---
     static SETTINGS_DEFAULTS := Map(

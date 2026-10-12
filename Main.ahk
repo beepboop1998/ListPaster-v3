@@ -65,8 +65,8 @@ hotkeys.OnPausedChanged(ObjBindMethod(controller, "OnPausedChanged"))
 hotkeys.OnPausedChanged(ObjBindMethod(tray, "OnPausedChanged"))
 
 ; --- Shortcuts (core = always on; extra = only while "Extra hotkeys" is ticked in the tray menu) ---
-hotkeys.Add(Constants.HK_PASTE_NEXT, "Paste next", (*) => controller.PasteNext(), "core")
-hotkeys.Add(Constants.HK_UNDO, "Undo last paste", (*) => controller.Undo(), "core")
+hotkeys.Add(Constants.HK_PASTE_NEXT, "Paste next", (hk) => controller.PasteNext(hk), "core")
+hotkeys.Add(Constants.HK_UNDO, "Undo last paste", (hk) => controller.Undo(hk), "core")
 hotkeys.Add(Constants.HK_BACK, "Step back", (*) => controller.Back(), "extra")
 hotkeys.Add(Constants.HK_RESET, "Restart at top", (*) => controller.Reset(), "extra")
 hotkeys.Add(Constants.HK_FORCE_LOAD, "Load from clipboard", (*) => controller.ForceLoad(), "extra")
