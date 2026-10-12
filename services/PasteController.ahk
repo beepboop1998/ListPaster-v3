@@ -1,7 +1,8 @@
 /*
     PasteController.ahk
     Responsibility: user actions from shortcuts, the tray menu and clipboard events (paste, undo, step back, restart,
-                    load, clear, exit, mode switches), and the rule that an unfinished list is never replaced without asking.
+                    load, clear, exit, mode switches). A copied list replaces the current one (the same list keeps its
+                    place); menu actions ask before discarding an unfinished list.
     Dependencies: ItemList, DeliveryService, ClipboardService, Notifier, Settings
 */
 class PasteController {
@@ -156,8 +157,8 @@ class PasteController {
         lines := this._items.ParseLines(text)
         if (lines.Length < 2)
             return                                  ; single-line copies never replace the list
-        if this._items.IsUnfinished() {
-            this._tips.Show("Kept your unfinished list (" this._DoneText() "). Tray menu → Load from clipboard replaces it.")
+        if (!this._items.IsFinished() && this._items.HasSameItems(lines)) {   ; re-copy mid-list: keep the place
+            this._tips.Show("Same list, still at " this._items.GetPosition() "/" this._items.GetCount() ". Tray menu → Restart at top to start over.")
             return
         }
         this._items.Load(lines)

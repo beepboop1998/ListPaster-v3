@@ -60,9 +60,9 @@ ListPaster's own windows, the taskbar, or the desktop; it tells you to click int
 
 ## How the list works
 
-- **Loading.** Copying text with two or more lines loads it as the list, **only if you have no list or the
-  current one is complete**. An unfinished list (including one you haven't started) is never replaced
-  without asking. To replace it, use *Load from clipboard*.
+- **Loading.** Copying text with two or more lines loads it as the list and replaces the current one, even
+  mid-list. Copying a single line never replaces the list, and copying the same list again keeps your place
+  (unless it's complete, then it starts again from the top).
 - **One line = one item.** Lines that are empty or only spaces are skipped, and everything else is kept
   exactly. A row copied from several spreadsheet columns stays one item with tabs in it: Type mode presses
   Tab between the parts, and Paste mode pastes the tabs (which fills the cells next to it in Excel).
@@ -122,7 +122,8 @@ name is wrong.
 
 - Most shortcuts moved to the tray menu. Turn on **Extra hotkeys** to get the old Ctrl+Alt ones back.
 - Lists are no longer saved by default. A list saved by 3.0 is loaded once, then removed from disk, and you're told.
-- Copying a new list no longer replaces a list you've loaded but haven't started.
+- Copying a new list replaces the current one even mid-list (3.0 locked it until the end). Copying the same list
+  again keeps your place.
 
 ## Known limitations
 
