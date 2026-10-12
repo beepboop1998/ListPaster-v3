@@ -47,7 +47,7 @@ class Constants {
     static CLIP_RESTORE_IDLE_MS := 1500
     static CLIP_WAIT_S := 1
     static MENU_FOCUS_DELAY_MS := 300
-    static MODIFIER_WAIT_MS := 1000
+    static MODIFIER_WAIT_MS := 3000
 
     ; --- Modifiers our hotkeys use; InputSender waits for them to be released before sending ---
     static HOTKEY_MODIFIERS := ["Ctrl", "Shift", "Alt"]
