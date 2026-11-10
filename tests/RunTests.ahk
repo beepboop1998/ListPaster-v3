@@ -725,43 +725,46 @@ Test_A16_HeldKeys() {
 Test_A17_RightClickStaleRow() {
     items := ItemList()
     win := TestListWindow(items, NewPrefs(), FakeTimer())
-    Aim(row, text) {
-        win._menuRow := row
-        win._menuRowText := text
-    }
+    win._menu := FakeMenu()                        ; the real right-click handler runs; only the popup is faked
+    Aim(row) => win._OnContextMenu("", row, true, 0, 0)
     LoadNew() => items.InsertAt(1, "new")         ; a copied list arriving while the prompt is open
-    AimAtC() => Aim(3, "c")                        ; a second right-click while the prompt is open
+    AimAtC() => Aim(3)                             ; a second right-click while the prompt is open
 
-    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Load(["a", "b", "c"]), Aim(2)
+    Assert.Eq(win._menuRow "/" win._menuRowText, "2/b", "a right-click remembers the clicked row and its text")
+    Assert.Eq(win._menu.shows "/" Join(win._menu.disabled), "1/", "the menu opens with every row action available")
+    Aim(0)
+    Assert.Eq(Join(win._menu.disabled), "Set as next|Edit...|Insert above...|Delete", "a right-click below the rows offers only Add to end")
+    items.Load(["a", "b", "c"]), Aim(2)
     win.askReply := "X"
     win._OnMenuEdit()
     Assert.Eq(Join(items.ToArray()), "a|X|c", "Edit replaces the right-clicked row")
 
-    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Load(["a", "b", "c"]), Aim(2)
     win.onAsk := LoadNew
     win._OnMenuEdit()
     Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Edit is skipped when the list changed during the prompt")
-    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Load(["a", "b", "c"]), Aim(2)
     win._OnMenuInsert()
     Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Insert is skipped when the list changed during the prompt")
 
-    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Load(["a", "b", "c"]), Aim(2)
     win.onAsk := AimAtC
     win._OnMenuEdit()
     Assert.Eq(Join(items.ToArray()), "a|X|c", "a right-click during the prompt doesn't redirect the edit")
     win.onAsk := ""
 
-    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Load(["a", "b", "c"]), Aim(2)
     items.Remove(1)
     win._OnMenuSetNext()
     Assert.Eq(items.GetPosition(), 0, "Set as next is skipped when the row now holds another item")
     win._OnMenuDelete()
     Assert.Eq(Join(items.ToArray()), "b|c", "Delete is skipped when the row now holds another item")
 
-    Aim(2, "c")
+    Aim(2)
     win._OnMenuSetNext()
     Assert.Eq(items.GetPosition(), 1, "Set as next works on an unchanged row")
-    Aim(1, "b")
+    Aim(1)
     win._OnMenuDelete()
     Assert.Eq(Join(items.ToArray()), "c", "Delete works on an unchanged row")
 }
@@ -996,6 +999,27 @@ class FakeDelivery {
         this.restoreNowCalls += 1
         if (this.restoreText != "")
             this.clip.text := this.restoreText
+    }
+}
+
+; Right-click menu that records what it was asked to do (no popup).
+class FakeMenu {
+    shows := 0
+    disabled := []
+    Enable(name) {
+        for i, item in this.disabled {
+            if (item = name) {
+                this.disabled.RemoveAt(i)
+                return
+            }
+        }
+    }
+    Disable(name) {
+        this.Enable(name)
+        this.disabled.Push(name)
+    }
+    Show(*) {
+        this.shows += 1
     }
 }
 
