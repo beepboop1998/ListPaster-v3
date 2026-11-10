@@ -2,7 +2,7 @@
     TrayMenu.ahk
     Responsibility: the tray icon's menu and tooltip: status, list actions, settings choices, pause and exit.
     Dependencies: ItemList, Settings, HotkeyManager, TimingEngine, and an action map from Main
-                  (show, generate, load, back, restart, clear, exit -> callables)
+                  (show, generate, load, back, restart, clear, restore, exit -> callables)
 */
 class TrayMenu {
     ; --- Properties ---
@@ -18,7 +18,7 @@ class TrayMenu {
     _built := false
     _statusText := ""     ; current text of the status line (items are renamed by their current text)
     _pauseText := ""      ; current text of the pause item
-    _labels := Map("show", "Show list window", "generate", "Generate list...", "load", "Load from clipboard", "back", "Step back", "restart", "Restart at top", "clear", "Clear list", "exit", "Exit")
+    _labels := Map("show", "Show list window", "generate", "Generate list...", "load", "Load from clipboard", "back", "Step back", "restart", "Restart at top", "clear", "Clear list", "restore", "Restore previous list", "exit", "Exit")
     _toggleLabels := Map("ExtraHotkeys", "Extra hotkeys", "ShowNextInTooltip", "Show next item in tooltip", "RememberList", "Remember list after exit")
 
     ; --- Constructor ---
@@ -108,7 +108,7 @@ class TrayMenu {
             this._menu.Add(this._statusText, ObjBindMethod(this, "_OnStatus"))
             this._menu.Disable("1&")                                ; the status line is display-only
             this._menu.Add()
-            for id in ["show", "generate", "load", "back", "restart", "clear"]
+            for id in ["show", "generate", "load", "back", "restart", "clear", "restore"]
                 this._menu.Add(this._labels[id], ObjBindMethod(this, "_OnAction", id))
             this._menu.Add()
             this._menu.Add("Auto-advance", this._advanceMenu)

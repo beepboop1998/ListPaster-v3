@@ -368,6 +368,47 @@ Test_A9_UnfinishedList() {
     env.prefs.Set("RememberList", 1)
     Assert.Eq(env.ctl.ConfirmExit(), 1, "exit doesn't ask when the list will be remembered")
     Assert.Eq(env.tips.confirms.Length, asked, "no question when Remember is on")
+
+    env := NewControllerEnv()
+    env.ctl.RestorePrevious()
+    Assert.Contains(env.tips.Last(), "No previous list", "Restore previous list with nothing kept says so")
+    env.ctl.OnClipboardText("one`ntwo`nthree")
+    env.ctl.PasteNext()
+    env.ctl.OnClipboardText("p`nq")
+    Assert.Contains(env.tips.Last(), "Restore previous list", "replacing an unfinished list points to Restore previous list")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "one|two|three @1", "Restore previous list brings the replaced list back at its place")
+    Assert.Eq(env.tips.confirms.Length, 0, "restoring never asks")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "p|q @0", "restoring again swaps back, so a restore can be undone")
+    loop 2
+        env.ctl.PasteNext()
+    env.ctl.OnClipboardText("x`ny")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "one|two|three @1", "a finished list is not kept when a copy replaces it")
+    env.tips.answer := true
+    env.ctl.ClearList()
+    env.ctl.RestorePrevious()
+    Assert.Eq(env.items.GetCount(), 0, "a confirmed Clear list also forgets the kept list")
+    Assert.Contains(env.tips.Last(), "No previous list", "and Restore previous list says there is none")
+
+    env := NewControllerEnv()
+    paths := StorePaths()
+    timer := FakeTimer()
+    env.prefs.Set("RememberList", 1)
+    store := ListStore(env.items, timer, FakeTips(), env.prefs, paths.list, paths.session)
+    env.items.OnChange(ObjBindMethod(store, "OnListChanged"))
+    env.ctl.OnClipboardText("s1`ns2`ns3")
+    env.ctl.PasteNext()
+    timer.Run("listSave")
+    env.ctl.OnClipboardText("t1`nt2")
+    timer.Run("listSave")
+    Assert.Eq(FileExist(paths.list) ? FileRead(paths.list, "UTF-8") : "(missing)", "t1`r`nt2", "the saved list holds only the new list after a replacing copy")
+    env.ctl.RestorePrevious()
+    Assert.True(timer.Has("listSave"), "restoring schedules a save")
+    timer.Run("listSave")
+    Assert.Eq(FileExist(paths.list) ? FileRead(paths.list, "UTF-8") : "(missing)", "s1`r`ns2`r`ns3", "the save writes the restored list")
+    Assert.Eq(IniRead(paths.session, "Session", "Position", "?"), "1", "and its position")
 }
 
 Test_A10_Settings() {
@@ -569,10 +610,11 @@ Test_A13_TrayState() {
     env.items.Load(["a", "b", "c"])
     env.tray.Start()
     hMenu := A_TrayMenu.Handle
-    Assert.Eq(DllCall("GetMenuItemCount", "Ptr", hMenu), 18, "the tray menu has the planned 18 entries (separators included)")
+    Assert.Eq(DllCall("GetMenuItemCount", "Ptr", hMenu), 19, "the tray menu has the planned 19 entries (separators included)")
     Assert.Eq(MenuText(hMenu, 0) "/" MenuGreyed(hMenu, 0), "Next: 1 of 3 · None · Type/1", "the first item is the greyed status line")
     Assert.Eq(MenuGreyed(hMenu, 5) "/" MenuGreyed(hMenu, 6) "/" MenuGreyed(hMenu, 7), "1/1/0", "Step back and Restart are greyed at item 1; Clear is not")
-    Assert.Eq(MenuText(hMenu, 16) "/" MenuText(hMenu, 17), "Pause ListPaster/Exit", "Pause and Exit are at the bottom")
+    Assert.Eq(MenuText(hMenu, 8) "/" MenuGreyed(hMenu, 8), "Restore previous list/0", "Restore previous list follows Clear and is always enabled")
+    Assert.Eq(MenuText(hMenu, 17) "/" MenuText(hMenu, 18), "Pause ListPaster/Exit", "Pause and Exit are at the bottom")
     Assert.Eq(A_TrayMenu.Default, "Show list window", "double-clicking the icon opens the list window")
 
     env.items.Advance()
@@ -582,7 +624,7 @@ Test_A13_TrayState() {
 
     env.tray._OnToggle("RememberList")
     env.timer.Run("trayRefresh")
-    Assert.Eq(env.prefs.Get("RememberList") "/" MenuChecked(hMenu, 14), "1/1", "a toggle item flips its setting and shows a tick")
+    Assert.Eq(env.prefs.Get("RememberList") "/" MenuChecked(hMenu, 15), "1/1", "a toggle item flips its setting and shows a tick")
     env.tray._OnAdvance("Enter")
     env.tray._OnMode("Paste")
     Assert.Eq(env.prefs.Get("AdvanceMode") "/" env.prefs.Get("DeliveryMode"), "Enter/Paste", "the radio items change their settings")
@@ -590,11 +632,11 @@ Test_A13_TrayState() {
     env.hk.SetPaused(true)
     env.timer.Run("trayRefresh")
     Assert.Eq(MenuText(hMenu, 0), "Paused — Next: 2 of 3 · Enter · Paste", "the status line shows paused and the new modes")
-    Assert.Eq(MenuText(hMenu, 16), "Resume ListPaster", "the pause item becomes Resume")
+    Assert.Eq(MenuText(hMenu, 17), "Resume ListPaster", "the pause item becomes Resume")
     env.hk.SetPaused(false)
-    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+    for id in ["show", "generate", "load", "back", "restart", "clear", "restore", "exit"]
         env.tray._OnAction(id)
-    Assert.Eq(Join(env.ran), "show|generate|load|back|restart|clear|exit", "every menu action runs its callback")
+    Assert.Eq(Join(env.ran), "show|generate|load|back|restart|clear|restore|exit", "every menu action runs its callback")
 }
 
 Test_A14_Generator() {
@@ -767,7 +809,7 @@ NewTrayEnv() {
     env.timer := FakeTimer()
     env.ran := []
     env.actions := Map()
-    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+    for id in ["show", "generate", "load", "back", "restart", "clear", "restore", "exit"]
         env.actions[id] := ObjBindMethod(env.ran, "Push", id)
     env.tray := TrayMenu(env.items, env.prefs, env.hk, env.timer, env.actions)
     env.items.OnChange(ObjBindMethod(env.tray, "OnListChanged"))

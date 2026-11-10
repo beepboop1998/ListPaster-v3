@@ -48,6 +48,7 @@ actions    := Map(
     "back",     (*) => controller.Back(),
     "restart",  (*) => controller.Reset(),
     "clear",    (*) => controller.ClearList(),
+    "restore",  (*) => controller.RestorePrevious(),
     "exit",     (*) => controller.ConfirmExit() && ExitApp()
 )
 tray       := TrayMenu(items, prefs, hotkeys, timer, actions)
