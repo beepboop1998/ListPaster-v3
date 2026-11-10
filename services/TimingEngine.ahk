@@ -41,11 +41,6 @@ class TimingEngine {
         this._callbacks[name] := fn
     }
 
-    Unregister(name) {
-        if this._callbacks.Has(name)
-            this._callbacks.Delete(name)
-    }
-
     ; Runs fn once, delayMs from now. Calling again with the same name replaces the pending job.
     After(name, delayMs, fn) {
         if !HasMethod(fn)
