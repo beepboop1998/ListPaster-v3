@@ -255,6 +255,47 @@ Test_A8_RepeatedPresses() {
         env.ctl.PasteNext()
     Assert.Eq(Join(env.delivery.delivered), Join(names), "20 presses insert 20 items in order, none skipped or doubled")
     Assert.Eq(env.items.GetPosition(), 20, "position matches the number of presses")
+
+    ; Holding the shortcut: the own-key wait runs before Critical (repeats are dropped), the held-key wait after.
+    env := NewControllerEnv()
+    env.items.Load(["a", "b"])
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(Join(env.delivery.waits), "own:$^+v:0|held:$^+v:1", "paste waits for its own key before going Critical")
+    Assert.Eq(Join(env.delivery.delivered), "a", "and then delivers the item")
+    env.delivery.waits := []
+    Critical("Off")
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(Join(env.delivery.waits), "own:$^<!z:0|held:$^<!z:1", "undo waits for its own key before going Critical")
+    Assert.Eq(Join(env.delivery.erased), "a", "and then erases the item")
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(Join(env.delivery.delivered), "a|a", "nothing is typed while the shortcut's own key is held")
+    Assert.Eq(env.items.GetPosition(), 1, "and the position doesn't move")
+    Assert.Eq(env.tips.Last(), env.delivery.ownHeld, "and says to let go")
+    Assert.Eq(A_IsCritical ? 1 : 0, 0, "a paste refused for its own key never went Critical")
+    Critical("Off")
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(Join(env.delivery.erased), "a", "undo erases nothing while its own key is held")
+    Assert.Eq(env.items.GetPosition(), 1, "and keeps the position")
+    Assert.Eq(env.tips.Last(), env.delivery.ownHeld, "and says to let go")
+    Assert.Eq(A_IsCritical ? 1 : 0, 0, "an undo refused for its own key never went Critical")
+
+    dEnv := NewDeliveryEnv()
+    Assert.Eq(dEnv.dlv.OwnKeyProblem("$^+v"), "", "no problem when the shortcut's own key comes up in time")
+    Assert.Eq(dEnv.sender.LastCall(), "waitmain:$^+v/" Constants.KEY_RELEASE_WAIT_S, "delivery waits on the shortcut's own key with the set timeout")
+    dEnv.sender.keysHeld := true
+    Assert.Contains(dEnv.dlv.OwnKeyProblem("$^+v"), "Let go of the shortcut's keys", "the own key still down after the wait gives a message")
+
+    snd := InputSender()
+    Assert.Eq(snd.MainKey("$^+v"), "v", "the main key of Ctrl+Shift+V is V")
+    Assert.Eq(snd.MainKey("$^<!z"), "z", "left-Alt prefixes are stripped from the main key")
+    Assert.Eq(snd.MainKey(""), "", "no shortcut has no main key")
+    Assert.Eq(snd.WaitForMainKeyUp("", 1), 1, "with no main key there is nothing to wait for")
+    Assert.Eq(snd.WaitForMainKeyUp("$^+NotAKey", 1), 0, "an unknown main key name fails safely")
 }
 
 Test_A9_UnfinishedList() {
@@ -700,6 +741,10 @@ class FakeSender {
         this.calls.Push("wait:" hotkey "/" timeoutS)
         return !this.keysHeld
     }
+    WaitForMainKeyUp(hotkey, timeoutS) {
+        this.calls.Push("waitmain:" hotkey "/" timeoutS)
+        return !this.keysHeld
+    }
     TypeText(text) {
         if (text = "")
             return false
@@ -808,12 +853,19 @@ class FakeDelivery {
     restoreNowCalls := 0
     held := ""
     heldHotkeys := []
+    ownHeld := ""
+    waits := []
     __New(clip := "") {
         this.clip := clip
     }
     TargetProblem() => this.problem
+    OwnKeyProblem(hotkey) {
+        this.waits.Push("own:" hotkey ":" (A_IsCritical ? 1 : 0))
+        return this.ownHeld
+    }
     HeldKeysProblem(hotkey) {
         this.heldHotkeys.Push(hotkey)
+        this.waits.Push("held:" hotkey ":" (A_IsCritical ? 1 : 0))
         return this.held
     }
     Deliver(text, advanceMode, deliveryMode) {

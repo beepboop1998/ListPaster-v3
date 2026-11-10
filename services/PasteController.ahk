@@ -31,7 +31,12 @@ class PasteController {
     ; --- Public Methods: shortcuts ---
     ; hotkey: the shortcut that fired (e.g. "$^+v"); its keys must be released before anything is typed.
     PasteNext(hotkey := "") {
-        Critical                                    ; other shortcuts and clipboard events wait until this finishes
+        problem := this._delivery.OwnKeyProblem(hotkey)    ; before Critical, so holding the shortcut queues no repeats
+        if (problem != "") {
+            this._tips.Show(problem)
+            return
+        }
+        Critical                                   ; other shortcuts and clipboard events wait until this finishes
         if this._items.IsEmpty() {
             this._tips.Show("No list loaded. Copy a list of 2+ lines, or use the tray menu.")
             return
@@ -62,6 +67,11 @@ class PasteController {
     }
 
     Undo(hotkey := "") {
+        problem := this._delivery.OwnKeyProblem(hotkey)    ; before Critical, so holding the shortcut queues no repeats
+        if (problem != "") {
+            this._tips.Show(problem)
+            return
+        }
         Critical
         if !this._undo.Length {
             this._tips.Show("Nothing to undo")
