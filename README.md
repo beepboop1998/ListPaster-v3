@@ -138,6 +138,9 @@ name is wrong.
 - **Enter auto-advance** presses Enter after every item, so don't use it in forms where Enter submits.
 - **On Remote Desktop**, if Paste mode pastes the previous item, raise `PastePreDelayMs` in `data\settings.ini`.
 - **Right Alt:** Ctrl + *right* Alt shortcuts don't trigger; use the left Alt key.
+- **Other AutoHotkey scripts send keys more slowly while ListPaster runs.** ListPaster uses a keyboard hook, and
+  AutoHotkey makes every *other* script's `SendInput` fall back to the slower `SendEvent` while another script's hook
+  is installed. ListPaster's own typing isn't affected. Exit ListPaster to get the other script's speed back.
 
 ## Project layout
 
