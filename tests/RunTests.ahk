@@ -286,6 +286,33 @@ Test_A8_RepeatedPresses() {
     Assert.Eq(env.tips.Last(), env.delivery.ownHeld, "and says to let go")
     Assert.Eq(A_IsCritical ? 1 : 0, 0, "an undo refused for its own key never went Critical")
 
+    ; Key-repeats queued while a paste was Critical start their own threads once it ends, with the key already up.
+    ; HotkeyManager lets one launch through per physical press of the main key. (F15 isn't on normal keyboards.)
+    env := NewControllerEnv()
+    env.items.Load(["a", "b", "c", "d"])
+    hk := HotkeyManager(env.prefs, FakeTips())
+    hk.Add("F15", "Test paste", (k) => env.ctl.PasteNext(k), "core", true)
+    hk.RegisterAll()
+    Assert.Eq(HotkeyExists("~*F15 up"), 1, "a once-per-press shortcut also watches its main key coming up")
+    paste := hk._entries[1]
+    paste.press.Call("$F15")
+    loop 30
+        paste.press.Call("$F15")                   ; repeats buffered while the first paste was Critical
+    Assert.Eq(Join(env.delivery.delivered), "a", "repeats queued during a paste type nothing more")
+    paste.release.Call("~*F15 up")
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b", "the next real press types the next item")
+    paste.release.Call("~*F15 up")
+    paste.press.Call("$F15")
+    paste.release.Call("~*F15 up")                 ; quick taps queued during a paste each still count
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d", "taps with a release between them each type one item")
+    hk.SetPaused(true)                             ; a release missed while paused...
+    hk.SetPaused(false)
+    env.items.Load(["e", "f"])
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d|e", "...doesn't swallow the first press after resuming")
+
     dEnv := NewDeliveryEnv()
     Assert.Eq(dEnv.dlv.OwnKeyProblem("$^+v"), "", "no problem when the shortcut's own key comes up in time")
     Assert.Eq(dEnv.sender.LastCall(), "waitmain:$^+v/" Constants.KEY_RELEASE_WAIT_S, "delivery waits on the shortcut's own key with the set timeout")
@@ -833,6 +860,15 @@ StorePaths() {
     static count := 0
     count += 1
     return {list: TestDir() "\list" count ".txt", session: TestDir() "\session" count ".ini"}
+}
+
+HotkeyExists(keyName) {
+    try {
+        Hotkey(keyName, , "On")
+        return 1
+    } catch Error {
+        return 0
+    }
 }
 
 Join(arr, sep := "|") {

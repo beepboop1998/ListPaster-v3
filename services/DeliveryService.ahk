@@ -40,7 +40,8 @@ class DeliveryService {
     ; "" once the shortcut's own key is released; otherwise a message for the user.
     ; NOTE: call this BEFORE Critical. While a shortcut's thread is Critical, AutoHotkey buffers every key-repeat
     ; press of that shortcut and runs each one later (holding Ctrl+Shift+V typed item after item); while the thread
-    ; is running and not Critical, the repeats are dropped.
+    ; is running and not Critical, the repeats are dropped. Repeats buffered anyway (the key held again during a
+    ; paste) are dropped by HotkeyManager, which runs the shortcut once per physical press.
     OwnKeyProblem(hotkey) {
         if this._sender.WaitForMainKeyUp(hotkey, Constants.KEY_RELEASE_WAIT_S)
             return ""
