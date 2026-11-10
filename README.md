@@ -141,8 +141,7 @@ name is wrong.
 
 ## Project layout
 
-v3 rewrote the original single-file script as one class per file. The old script is kept at
-[`legacy/ListPaster_v2.ahk`](legacy/ListPaster_v2.ahk).
+v3 rewrote the original single-file script as one class per file. The old v2 script is in this repository's Git history.
 
 ```
 ListPaster/
@@ -154,7 +153,6 @@ ListPaster/
 ├── gui/                  ; TrayMenu, ListWindow, SequenceDialog
 ├── lib/                  ; SequenceBuilder (pure number/IP generation)
 ├── tests/                ; RunTests.ahk: automated tests, no desktop interaction
-├── legacy/               ; ListPaster_v2.ahk, the untouched v2 baseline
 └── data/                 ; created at runtime (settings; the list only if remembered)
 ```
 
