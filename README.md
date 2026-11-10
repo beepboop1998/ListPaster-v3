@@ -43,6 +43,7 @@ Everything else is in the **tray menu** (right-click the icon):
 | Step back | Next paste repeats the previous item. Nothing already entered is changed |
 | Restart at top | Next paste is item 1 again |
 | Clear list | Empties the list (asks first if it's unfinished) |
+| Restore previous list | Brings back the unfinished list your last copy replaced, at the same place |
 | Auto-advance ▸ | None / Tab / Enter, pressed after each item |
 | Insert mode ▸ | Type (keystrokes) / Paste (clipboard + Ctrl+V) |
 | Extra hotkeys | Turns on the shortcuts below |
@@ -62,7 +63,8 @@ ListPaster's own windows, the taskbar, or the desktop; it tells you to click int
 
 - **Loading.** Copying text with two or more lines loads it as the list and replaces the current one, even
   mid-list. Copying a single line never replaces the list, and copying the same list again keeps your place
-  (unless it's complete, then it starts again from the top).
+  (unless it's complete, then it starts again from the top). The unfinished list it replaced is kept in memory
+  until you clear the list or exit; *Restore previous list* in the tray menu brings it back.
 - **One line = one item.** Lines that are empty or only spaces are skipped, and everything else is kept
   exactly. A row copied from several spreadsheet columns stays one item with tabs in it: Type mode presses
   Tab between the parts, and Paste mode pastes the tabs (which fills the cells next to it in Excel).
@@ -104,8 +106,8 @@ LibreOffice Calc. It can't read what's in other apps' fields, so:
 
 - Lists stay **in memory only** unless you turn on *Remember list after exit*. Then they're saved as plain text
   in `data\list.txt`. Turning it off deletes that file.
-- The next item is hidden from the tray tooltip unless you turn it on, since tooltips are visible to anyone
-  looking at or sharing your screen.
+- The tray tooltip shows ListPaster's version and the status line. The next item is hidden from it unless you
+  turn it on, since tooltips are visible to anyone looking at or sharing your screen.
 - `data\settings.ini` holds only settings, and `error.log` never contains list items.
 
 ## Shortcut conflicts
