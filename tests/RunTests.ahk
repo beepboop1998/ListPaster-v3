@@ -22,6 +22,7 @@
 #Include %A_ScriptDir%\..\services\ListStore.ahk
 #Include %A_ScriptDir%\..\services\HotkeyManager.ahk
 #Include %A_ScriptDir%\..\gui\TrayMenu.ahk
+#Include %A_ScriptDir%\..\gui\ListWindow.ahk
 
 OnError(ReportUncaught)
 ResetTestFiles()
@@ -42,6 +43,7 @@ RunTest("A13 Tray state", Test_A13_TrayState)
 RunTest("A14 Generator", Test_A14_Generator)
 RunTest("A15 Clipboard ownership and history markers", Test_A15_ClipboardOwnership)
 RunTest("A16 Shortcut keys released before sending", Test_A16_HeldKeys)
+RunTest("A17 Right-click on a changed list", Test_A17_RightClickStaleRow)
 
 Finish()
 
@@ -656,6 +658,50 @@ Test_A16_HeldKeys() {
     Assert.Eq(snd.WaitForKeysUp("$^+NotAKey", 1), 0, "an unknown key name fails safely instead of typing")
 }
 
+Test_A17_RightClickStaleRow() {
+    items := ItemList()
+    win := TestListWindow(items, NewPrefs(), FakeTimer())
+    Aim(row, text) {
+        win._menuRow := row
+        win._menuRowText := text
+    }
+    LoadNew() => items.InsertAt(1, "new")         ; a copied list arriving while the prompt is open
+    AimAtC() => Aim(3, "c")                        ; a second right-click while the prompt is open
+
+    items.Load(["a", "b", "c"]), Aim(2, "b")
+    win.askReply := "X"
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "a|X|c", "Edit replaces the right-clicked row")
+
+    items.Load(["a", "b", "c"]), Aim(2, "b")
+    win.onAsk := LoadNew
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Edit is skipped when the list changed during the prompt")
+    items.Load(["a", "b", "c"]), Aim(2, "b")
+    win._OnMenuInsert()
+    Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Insert is skipped when the list changed during the prompt")
+
+    items.Load(["a", "b", "c"]), Aim(2, "b")
+    win.onAsk := AimAtC
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "a|X|c", "a right-click during the prompt doesn't redirect the edit")
+    win.onAsk := ""
+
+    items.Load(["a", "b", "c"]), Aim(2, "b")
+    items.Remove(1)
+    win._OnMenuSetNext()
+    Assert.Eq(items.GetPosition(), 0, "Set as next is skipped when the row now holds another item")
+    win._OnMenuDelete()
+    Assert.Eq(Join(items.ToArray()), "b|c", "Delete is skipped when the row now holds another item")
+
+    Aim(2, "c")
+    win._OnMenuSetNext()
+    Assert.Eq(items.GetPosition(), 1, "Set as next works on an unchanged row")
+    Aim(1, "b")
+    win._OnMenuDelete()
+    Assert.Eq(Join(items.ToArray()), "c", "Delete works on an unchanged row")
+}
+
 ; =====================================================================================
 ; Builders
 ; =====================================================================================
@@ -895,6 +941,17 @@ class SeqClip extends ClipboardService {
     text := ""
     SequenceNumber() => this.seq
     ReadText() => this.text
+}
+
+; ListWindow with a scripted prompt (no GUI): onAsk runs while the "prompt" is open.
+class TestListWindow extends ListWindow {
+    askReply := ""
+    onAsk := ""
+    _AskText(prompt, current) {
+        if HasMethod(this.onAsk)
+            this.onAsk.Call()
+        return this.askReply
+    }
 }
 
 ; =====================================================================================
