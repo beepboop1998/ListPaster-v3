@@ -273,6 +273,10 @@ class ListWindow {
 
     _AskText(prompt, current) {
         try {
+            ; NOTE: +OwnDialogs is per thread; an owned prompt opens above this always-on-top window
+            ; instead of underneath it.
+            if IsObject(this._gui)
+                this._gui.Opt("+OwnDialogs")
             reply := InputBox(prompt, Constants.APP_NAME, "w320 h110", current)
         } catch Error as e {
             this._LogError(A_ThisFunc, e.Message)
