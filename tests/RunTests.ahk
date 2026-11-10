@@ -313,6 +313,27 @@ Test_A8_RepeatedPresses() {
     paste.press.Call("$F15")
     Assert.Eq(Join(env.delivery.delivered), "a|b|c|d|e", "...doesn't swallow the first press after resuming")
 
+    ; Held past the 3 s wait: the reminder shows, the thread ends, and the next auto-repeat starts a new one.
+    hk.Add("F16", "Test undo", (k) => env.ctl.Undo(k), "core", true)
+    hk.RegisterAll()
+    undo := hk._entries[2]
+    paste.release.Call("~*F15 up")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    paste.press.Call("$F15")                       ; the wait times out and shows the reminder
+    env.delivery.ownHeld := ""
+    paste.press.Call("$F15")                       ; the next repeat's wait would end when you let go
+    paste.release.Call("~*F15 up")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d|e", "holding the paste shortcut past the reminder types nothing")
+    Assert.Eq(env.items.GetPosition(), 1, "and the position doesn't move")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    undo.press.Call("$F16")
+    env.delivery.ownHeld := ""
+    undo.press.Call("$F16")
+    undo.release.Call("~*F16 up")
+    Assert.Eq(Join(env.delivery.erased), "", "holding the undo shortcut past the reminder erases nothing")
+    undo.press.Call("$F16")
+    Assert.Eq(Join(env.delivery.erased), "e", "a fresh press after letting go undoes as usual")
+
     dEnv := NewDeliveryEnv()
     Assert.Eq(dEnv.dlv.OwnKeyProblem("$^+v"), "", "no problem when the shortcut's own key comes up in time")
     Assert.Eq(dEnv.sender.LastCall(), "waitmain:$^+v/" Constants.KEY_RELEASE_WAIT_S, "delivery waits on the shortcut's own key with the set timeout")

@@ -70,8 +70,8 @@ ListPaster's own windows, the taskbar, or the desktop; it tells you to click int
   Tab between the parts, and Paste mode pastes the tabs (which fills the cells next to it in Excel).
 - **Each Ctrl+Shift+V advances by one**, only once the item was handed to Windows without error. Quick
   repeated presses each insert one item, in order. Holding the shortcut down doesn't repeat it: one press types
-  one item, when you let go. Keep the keys held for more than 3 seconds and you get a reminder to let go instead
-  (Undo works the same way).
+  one item, when you let go. Keep the keys held for more than 3 seconds and you get a reminder to let go instead,
+  and nothing is typed, even when you let go (Undo works the same way and erases nothing).
 - **At the end** you'll see *List complete (10 of 10)*. It never wraps around; use *Restart at top* to go again.
 - **The list window** shows every item and whether it's done. Click a row to make it the next item.
   Right-click a row to edit, insert, add or delete items.
