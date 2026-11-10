@@ -76,7 +76,7 @@ class TrayMenu {
             status := "Next: " (pos + 1) " of " count " · " cfg.advance " · " cfg.mode
         if paused
             status := "Paused — " status
-        tip := Constants.APP_NAME " — " status
+        tip := Constants.APP_NAME " " Constants.VERSION " — " status
         if (cfg.showNext = 1 && count > 0 && pos < count)
             tip .= "`nNext item: " StrReplace(info.next, "`t", " ")    ; Windows cuts a tooltip at its first tab
         if escapeAmpersands

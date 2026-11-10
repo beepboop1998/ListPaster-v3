@@ -570,7 +570,7 @@ Test_A13_TrayState() {
     st := env.tray.BuildState({count: 0, position: 0, next: ""}, cfg, false, false)
     Assert.Eq(st.status, "No list loaded", "status with no list")
     Assert.Eq(st.enabled["back"] "" st.enabled["restart"] "" st.enabled["clear"], "000", "Step back, Restart and Clear are greyed with no list")
-    Assert.Eq(st.tip, "ListPaster — No list loaded", "tooltip with no list")
+    Assert.Eq(st.tip, "ListPaster " Constants.VERSION " — No list loaded", "tooltip with no list shows the name and version")
 
     st := env.tray.BuildState({count: 10, position: 4, next: "Cam-005"}, cfg, false, false)
     Assert.Eq(st.status, "Next: 5 of 10 · Tab · Type", "mid-list status shows the next item number and both modes")
