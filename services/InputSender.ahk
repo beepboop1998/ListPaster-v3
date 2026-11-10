@@ -75,6 +75,11 @@ class InputSender {
 
     ; --- Private Methods ---
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

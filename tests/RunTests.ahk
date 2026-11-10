@@ -408,6 +408,28 @@ Test_A10_Settings() {
     Assert.Eq(env.prefs.Get("DeliveryMode"), "Paste", "Type switches to Paste")
     env.ctl.ToggleDelivery()
     Assert.Eq(env.prefs.Get("DeliveryMode"), "Type", "Paste switches back to Type")
+
+    savedLog := Constants.ERROR_LOG
+    Constants.ERROR_LOG := "no-such-folder\error.log"   ; FileAppend does not create folders, so every log write fails
+    try {
+        ThrowingListener(kind) {
+            throw Error("listener failed", A_ThisFunc)
+        }
+        lst := ItemList()
+        lst.OnChange(ThrowingListener)
+        logPrefs := NewPrefs()
+        threw := 0
+        try {
+            logPrefs.Set("AdvanceMode", "Sideways")
+            lst.Load(["a"])
+        } catch Error {
+            threw := 1
+        }
+        Assert.Eq(threw, 0, "a failed error.log write never escapes a catch block")
+        Assert.Eq(logPrefs.Get("AdvanceMode") "/" lst.GetCount(), "None/1", "and the work still completes")
+    } finally {
+        Constants.ERROR_LOG := savedLog
+    }
 }
 
 Test_A11_Persistence() {
