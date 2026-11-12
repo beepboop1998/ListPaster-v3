@@ -16,6 +16,7 @@ class ListWindow {
     _dirty := true        ; full render needed at next Show()
     _shownIdx := 0        ; list position the Status column currently shows
     _menuRow := 0          ; row under the last right-click (0 = empty area)
+    _menuRowText := ""     ; that row's text, to skip the action if the list changed since
     _prevActive := 0      ; HWND to re-activate after the menu / InputBox
 
     ; --- Constructor ---
@@ -204,6 +205,7 @@ class ListWindow {
 
     _OnContextMenu(ctrl, row, isRightClick, x, y) {
         this._menuRow := row
+        this._menuRowText := this._items.GetItem(row)
         this._prevActive := WinExist("A")         ; still the target app: this window never activates
         for name in ["Set as next", "Edit...", "Insert above...", "Delete"] {
             if (row >= 1)
@@ -224,23 +226,30 @@ class ListWindow {
 
     _OnMenuSetNext(*) {
         this._timer.Cancel("menuFocus")
-        this._items.JumpTo(this._menuRow)
+        if this._RowIs(this._menuRow, this._menuRowText)
+            this._items.JumpTo(this._menuRow)
         this._RestoreFocus()
     }
 
+    ; NOTE: row and text are copied to locals before the prompt: a copied list can load, or another
+    ; right-click can land, while it is open. A row that no longer holds the same text is left alone.
     _OnMenuEdit(*) {
         this._timer.Cancel("menuFocus")          ; keep the script in front so the prompt opens on top
-        text := this._AskText("Edit item " this._menuRow, this._items.GetItem(this._menuRow))
-        if (text != "")
-            this._items.Replace(this._menuRow, text)
+        row := this._menuRow
+        was := this._menuRowText
+        text := this._AskText("Edit item " row, was)
+        if (text != "" && this._RowIs(row, was))
+            this._items.Replace(row, text)
         this._RestoreFocus()
     }
 
     _OnMenuInsert(*) {
         this._timer.Cancel("menuFocus")          ; keep the script in front so the prompt opens on top
-        text := this._AskText("Insert above item " this._menuRow, "")
-        if (text != "")
-            this._items.InsertAt(this._menuRow, text)
+        row := this._menuRow
+        was := this._menuRowText
+        text := this._AskText("Insert above item " row, "")
+        if (text != "" && this._RowIs(row, was))
+            this._items.InsertAt(row, text)
         this._RestoreFocus()
     }
 
@@ -254,12 +263,20 @@ class ListWindow {
 
     _OnMenuDelete(*) {
         this._timer.Cancel("menuFocus")
-        this._items.Remove(this._menuRow)
+        if this._RowIs(this._menuRow, this._menuRowText)
+            this._items.Remove(this._menuRow)
         this._RestoreFocus()
     }
 
+    ; True if list row `row` still holds `text` (case-sensitive), i.e. the list hasn't changed under it.
+    _RowIs(row, text) => row >= 1 && this._items.GetItem(row) == text
+
     _AskText(prompt, current) {
         try {
+            ; NOTE: +OwnDialogs is per thread; an owned prompt opens above this always-on-top window
+            ; instead of underneath it.
+            if IsObject(this._gui)
+                this._gui.Opt("+OwnDialogs")
             reply := InputBox(prompt, Constants.APP_NAME, "w320 h110", current)
         } catch Error as e {
             this._LogError(A_ThisFunc, e.Message)
@@ -331,6 +348,11 @@ class ListWindow {
     }
 
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

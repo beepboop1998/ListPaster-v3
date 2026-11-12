@@ -44,17 +44,42 @@ class InputSender {
         }
     }
 
+    ; Pure: the shortcut's own key without its modifiers, e.g. "$^+v" -> "v". "" unless there is exactly one key.
+    MainKey(hotkey) {
+        mainKey := RegExReplace(hotkey, "[\^!+#*~$<>]")
+        return InStr(mainKey, " ") ? "" : mainKey
+    }
+
+    ; Waits until the shortcut's own key is physically up. True at once when there is none; false if it is still
+    ; down after timeoutS or the key name is unknown.
+    WaitForMainKeyUp(hotkey, timeoutS) {
+        mainKey := this.MainKey(hotkey)
+        if (mainKey = "")
+            return true
+        try {
+            return KeyWait(mainKey, "T" timeoutS) ? true : false
+        } catch Error as e {
+            this._LogError(A_ThisFunc, e.Message)
+            return false
+        }
+    }
+
     ; Pure: every modifier plus the shortcut's own key, e.g. "$^+v" -> Ctrl, Alt, Shift, LWin, RWin, v.
     KeysToRelease(hotkey) {
         keys := ["Ctrl", "Alt", "Shift", "LWin", "RWin"]
-        mainKey := RegExReplace(hotkey, "[\^!+#*~$<>]")
-        if (mainKey != "" && !InStr(mainKey, " "))
+        mainKey := this.MainKey(hotkey)
+        if (mainKey != "")
             keys.Push(mainKey)
         return keys
     }
 
     ; --- Private Methods ---
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

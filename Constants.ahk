@@ -5,7 +5,7 @@
 */
 class Constants {
     static APP_NAME := "ListPaster"
-    static VERSION := "3.2"
+    static VERSION := "3.3"
 
     ; --- Files (relative to A_ScriptDir) ---
     static ERROR_LOG := "error.log"

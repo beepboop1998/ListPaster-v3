@@ -1,8 +1,9 @@
 /*
     PasteController.ahk
     Responsibility: user actions from shortcuts, the tray menu and clipboard events (paste, undo, step back, restart,
-                    load, clear, exit, mode switches). A copied list replaces the current one (the same list keeps its
-                    place); menu actions ask before discarding an unfinished list.
+                    load, clear, restore previous, exit, mode switches). A copied list replaces the current one (the
+                    same list keeps its place) and an unfinished list it replaces is kept in memory for Restore
+                    previous list; menu actions ask before discarding an unfinished list.
     Dependencies: ItemList, DeliveryService, ClipboardService, Notifier, Settings
 */
 class PasteController {
@@ -14,6 +15,7 @@ class PasteController {
     _prefs := ""        ; Settings
     _undo := []         ; delivery records, newest last
     _paused := false    ; while paused, copies are ignored
+    _previous := ""     ; {lines: Array, position: Integer}: unfinished list a copy replaced, "" = none, memory only
 
     ; --- Constructor ---
     __New(items, delivery, clip, tips, prefs) {
@@ -31,7 +33,12 @@ class PasteController {
     ; --- Public Methods: shortcuts ---
     ; hotkey: the shortcut that fired (e.g. "$^+v"); its keys must be released before anything is typed.
     PasteNext(hotkey := "") {
-        Critical                                    ; other shortcuts and clipboard events wait until this finishes
+        problem := this._delivery.OwnKeyProblem(hotkey)    ; before Critical, so holding the shortcut queues no repeats
+        if (problem != "") {
+            this._tips.Show(problem)
+            return
+        }
+        Critical                                   ; other shortcuts and clipboard events wait until this finishes
         if this._items.IsEmpty() {
             this._tips.Show("No list loaded. Copy a list of 2+ lines, or use the tray menu.")
             return
@@ -62,6 +69,11 @@ class PasteController {
     }
 
     Undo(hotkey := "") {
+        problem := this._delivery.OwnKeyProblem(hotkey)    ; before Critical, so holding the shortcut queues no repeats
+        if (problem != "") {
+            this._tips.Show(problem)
+            return
+        }
         Critical
         if !this._undo.Length {
             this._tips.Show("Nothing to undo")
@@ -119,7 +131,23 @@ class PasteController {
         if !this._MayReplace("Clear")
             return
         this._items.Load([])
+        this._previous := ""
         this._tips.Show("List cleared")
+    }
+
+    ; Swaps in the unfinished list the last copy replaced; the current list is kept in its place, so this undoes itself.
+    RestorePrevious() {
+        if !IsObject(this._previous) {
+            this._tips.Show("No previous list to restore")
+            return
+        }
+        kept := this._previous
+        this._previous := ""
+        this._KeepCurrent()
+        this._items.Load(kept.lines)
+        if (kept.position > 0)
+            this._items.JumpTo(kept.position + 1)   ; NOTE: not ItemList.Restore: ListStore skips KIND_RESUME and wouldn't save
+        this._tips.Show("Restored previous list, at " this._items.GetPosition() "/" this._items.GetCount())
     }
 
     ; True when it's fine to exit; asks first if an unfinished list would be lost.
@@ -161,8 +189,9 @@ class PasteController {
             this._tips.Show("Same list, still at " this._items.GetPosition() "/" this._items.GetCount() ". Tray menu → Restart at top to start over.")
             return
         }
+        kept := this._KeepCurrent()
         this._items.Load(lines)
-        this._tips.Show(this._LoadedMessage(lines.Length))
+        this._tips.Show(this._LoadedMessage(lines.Length) (kept ? ". Tray menu → Restore previous list brings the old one back." : ""))
     }
 
     OnListChanged(kind) {
@@ -181,6 +210,14 @@ class PasteController {
         return this._tips.Confirm(verb " your unfinished list? (" this._DoneText() ")")
     }
 
+    ; Keeps the current list for RestorePrevious when it's unfinished. True when kept.
+    _KeepCurrent() {
+        if !this._items.IsUnfinished()
+            return false
+        this._previous := {lines: this._items.ToArray(), position: this._items.GetPosition()}
+        return true
+    }
+
     _DoneText() => this._items.GetPosition() " of " this._items.GetCount() " done"
 
     _LoadedMessage(count) {
@@ -188,6 +225,11 @@ class PasteController {
     }
 
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

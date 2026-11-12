@@ -31,7 +31,6 @@ class ItemList {
     Peek() => this.GetItem(this._index + 1)
     IsEmpty() => this._items.Length = 0
     IsFinished() => this._items.Length > 0 && this._index >= this._items.Length
-    IsMidList() => this._index > 0 && this._index < this._items.Length
     IsUnfinished() => this._items.Length > 0 && this._index < this._items.Length    ; includes not started
     ToArray() => this._items.Clone()
 
@@ -127,6 +126,11 @@ class ItemList {
     }
 
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

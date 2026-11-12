@@ -37,6 +37,17 @@ class DeliveryService {
         return "Click into the field you want to fill first."
     }
 
+    ; "" once the shortcut's own key is released; otherwise a message for the user.
+    ; NOTE: call this BEFORE Critical. While a shortcut's thread is Critical, AutoHotkey buffers every key-repeat
+    ; press of that shortcut and runs each one later (holding Ctrl+Shift+V typed item after item); while the thread
+    ; is running and not Critical, the repeats are dropped. Repeats buffered anyway (the key held again during a
+    ; paste) are dropped by HotkeyManager, which runs the shortcut once per physical press.
+    OwnKeyProblem(hotkey) {
+        if this._sender.WaitForMainKeyUp(hotkey, Constants.KEY_RELEASE_WAIT_S)
+            return ""
+        return "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    }
+
     ; "" once the shortcut's keys are released; otherwise a message for the user.
     ; NOTE: if Ctrl/Shift are still held when the text is sent, AutoHotkey presses them again at the end of the
     ; send. Let go mid-send while another program has a keyboard hook (Discord, overlays...) and they stay stuck.
@@ -173,6 +184,11 @@ class DeliveryService {
     }
 
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }

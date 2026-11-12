@@ -22,6 +22,7 @@
 #Include %A_ScriptDir%\..\services\ListStore.ahk
 #Include %A_ScriptDir%\..\services\HotkeyManager.ahk
 #Include %A_ScriptDir%\..\gui\TrayMenu.ahk
+#Include %A_ScriptDir%\..\gui\ListWindow.ahk
 
 OnError(ReportUncaught)
 ResetTestFiles()
@@ -42,6 +43,7 @@ RunTest("A13 Tray state", Test_A13_TrayState)
 RunTest("A14 Generator", Test_A14_Generator)
 RunTest("A15 Clipboard ownership and history markers", Test_A15_ClipboardOwnership)
 RunTest("A16 Shortcut keys released before sending", Test_A16_HeldKeys)
+RunTest("A17 Right-click on a changed list", Test_A17_RightClickStaleRow)
 
 Finish()
 
@@ -255,6 +257,95 @@ Test_A8_RepeatedPresses() {
         env.ctl.PasteNext()
     Assert.Eq(Join(env.delivery.delivered), Join(names), "20 presses insert 20 items in order, none skipped or doubled")
     Assert.Eq(env.items.GetPosition(), 20, "position matches the number of presses")
+
+    ; Holding the shortcut: the own-key wait runs before Critical (repeats are dropped), the held-key wait after.
+    env := NewControllerEnv()
+    env.items.Load(["a", "b"])
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(Join(env.delivery.waits), "own:$^+v:0|held:$^+v:1", "paste waits for its own key before going Critical")
+    Assert.Eq(Join(env.delivery.delivered), "a", "and then delivers the item")
+    env.delivery.waits := []
+    Critical("Off")
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(Join(env.delivery.waits), "own:$^<!z:0|held:$^<!z:1", "undo waits for its own key before going Critical")
+    Assert.Eq(Join(env.delivery.erased), "a", "and then erases the item")
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    Critical("Off")
+    env.ctl.PasteNext("$^+v")
+    Assert.Eq(Join(env.delivery.delivered), "a|a", "nothing is typed while the shortcut's own key is held")
+    Assert.Eq(env.items.GetPosition(), 1, "and the position doesn't move")
+    Assert.Eq(env.tips.Last(), env.delivery.ownHeld, "and says to let go")
+    Assert.Eq(A_IsCritical ? 1 : 0, 0, "a paste refused for its own key never went Critical")
+    Critical("Off")
+    env.ctl.Undo("$^<!z")
+    Assert.Eq(Join(env.delivery.erased), "a", "undo erases nothing while its own key is held")
+    Assert.Eq(env.items.GetPosition(), 1, "and keeps the position")
+    Assert.Eq(env.tips.Last(), env.delivery.ownHeld, "and says to let go")
+    Assert.Eq(A_IsCritical ? 1 : 0, 0, "an undo refused for its own key never went Critical")
+
+    ; Key-repeats queued while a paste was Critical start their own threads once it ends, with the key already up.
+    ; HotkeyManager lets one launch through per physical press of the main key. (F15 isn't on normal keyboards.)
+    env := NewControllerEnv()
+    env.items.Load(["a", "b", "c", "d"])
+    hk := HotkeyManager(env.prefs, FakeTips())
+    hk.Add("F15", "Test paste", (k) => env.ctl.PasteNext(k), "core", true)
+    hk.RegisterAll()
+    Assert.Eq(HotkeyExists("~*F15 up"), 1, "a once-per-press shortcut also watches its main key coming up")
+    paste := hk._entries[1]
+    paste.press.Call("$F15")
+    loop 30
+        paste.press.Call("$F15")                   ; repeats buffered while the first paste was Critical
+    Assert.Eq(Join(env.delivery.delivered), "a", "repeats queued during a paste type nothing more")
+    paste.release.Call("~*F15 up")
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b", "the next real press types the next item")
+    paste.release.Call("~*F15 up")
+    paste.press.Call("$F15")
+    paste.release.Call("~*F15 up")                 ; quick taps queued during a paste each still count
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d", "taps with a release between them each type one item")
+    hk.SetPaused(true)                             ; a release missed while paused...
+    hk.SetPaused(false)
+    env.items.Load(["e", "f"])
+    paste.press.Call("$F15")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d|e", "...doesn't swallow the first press after resuming")
+
+    ; Held past the 3 s wait: the reminder shows, the thread ends, and the next auto-repeat starts a new one.
+    hk.Add("F16", "Test undo", (k) => env.ctl.Undo(k), "core", true)
+    hk.RegisterAll()
+    undo := hk._entries[2]
+    paste.release.Call("~*F15 up")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    paste.press.Call("$F15")                       ; the wait times out and shows the reminder
+    env.delivery.ownHeld := ""
+    paste.press.Call("$F15")                       ; the next repeat's wait would end when you let go
+    paste.release.Call("~*F15 up")
+    Assert.Eq(Join(env.delivery.delivered), "a|b|c|d|e", "holding the paste shortcut past the reminder types nothing")
+    Assert.Eq(env.items.GetPosition(), 1, "and the position doesn't move")
+    env.delivery.ownHeld := "Let go of the shortcut's keys. (Holding it doesn't repeat.)"
+    undo.press.Call("$F16")
+    env.delivery.ownHeld := ""
+    undo.press.Call("$F16")
+    undo.release.Call("~*F16 up")
+    Assert.Eq(Join(env.delivery.erased), "", "holding the undo shortcut past the reminder erases nothing")
+    undo.press.Call("$F16")
+    Assert.Eq(Join(env.delivery.erased), "e", "a fresh press after letting go undoes as usual")
+
+    dEnv := NewDeliveryEnv()
+    Assert.Eq(dEnv.dlv.OwnKeyProblem("$^+v"), "", "no problem when the shortcut's own key comes up in time")
+    Assert.Eq(dEnv.sender.LastCall(), "waitmain:$^+v/" Constants.KEY_RELEASE_WAIT_S, "delivery waits on the shortcut's own key with the set timeout")
+    dEnv.sender.keysHeld := true
+    Assert.Contains(dEnv.dlv.OwnKeyProblem("$^+v"), "Let go of the shortcut's keys", "the own key still down after the wait gives a message")
+
+    snd := InputSender()
+    Assert.Eq(snd.MainKey("$^+v"), "v", "the main key of Ctrl+Shift+V is V")
+    Assert.Eq(snd.MainKey("$^<!z"), "z", "left-Alt prefixes are stripped from the main key")
+    Assert.Eq(snd.MainKey(""), "", "no shortcut has no main key")
+    Assert.Eq(snd.WaitForMainKeyUp("", 1), 1, "with no main key there is nothing to wait for")
+    Assert.Eq(snd.WaitForMainKeyUp("$^+NotAKey", 1), 0, "an unknown main key name fails safely")
 }
 
 Test_A9_UnfinishedList() {
@@ -325,6 +416,47 @@ Test_A9_UnfinishedList() {
     env.prefs.Set("RememberList", 1)
     Assert.Eq(env.ctl.ConfirmExit(), 1, "exit doesn't ask when the list will be remembered")
     Assert.Eq(env.tips.confirms.Length, asked, "no question when Remember is on")
+
+    env := NewControllerEnv()
+    env.ctl.RestorePrevious()
+    Assert.Contains(env.tips.Last(), "No previous list", "Restore previous list with nothing kept says so")
+    env.ctl.OnClipboardText("one`ntwo`nthree")
+    env.ctl.PasteNext()
+    env.ctl.OnClipboardText("p`nq")
+    Assert.Contains(env.tips.Last(), "Restore previous list", "replacing an unfinished list points to Restore previous list")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "one|two|three @1", "Restore previous list brings the replaced list back at its place")
+    Assert.Eq(env.tips.confirms.Length, 0, "restoring never asks")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "p|q @0", "restoring again swaps back, so a restore can be undone")
+    loop 2
+        env.ctl.PasteNext()
+    env.ctl.OnClipboardText("x`ny")
+    env.ctl.RestorePrevious()
+    Assert.Eq(Join(env.items.ToArray()) " @" env.items.GetPosition(), "one|two|three @1", "a finished list is not kept when a copy replaces it")
+    env.tips.answer := true
+    env.ctl.ClearList()
+    env.ctl.RestorePrevious()
+    Assert.Eq(env.items.GetCount(), 0, "a confirmed Clear list also forgets the kept list")
+    Assert.Contains(env.tips.Last(), "No previous list", "and Restore previous list says there is none")
+
+    env := NewControllerEnv()
+    paths := StorePaths()
+    timer := FakeTimer()
+    env.prefs.Set("RememberList", 1)
+    store := ListStore(env.items, timer, FakeTips(), env.prefs, paths.list, paths.session)
+    env.items.OnChange(ObjBindMethod(store, "OnListChanged"))
+    env.ctl.OnClipboardText("s1`ns2`ns3")
+    env.ctl.PasteNext()
+    timer.Run("listSave")
+    env.ctl.OnClipboardText("t1`nt2")
+    timer.Run("listSave")
+    Assert.Eq(FileExist(paths.list) ? FileRead(paths.list, "UTF-8") : "(missing)", "t1`r`nt2", "the saved list holds only the new list after a replacing copy")
+    env.ctl.RestorePrevious()
+    Assert.True(timer.Has("listSave"), "restoring schedules a save")
+    timer.Run("listSave")
+    Assert.Eq(FileExist(paths.list) ? FileRead(paths.list, "UTF-8") : "(missing)", "s1`r`ns2`r`ns3", "the save writes the restored list")
+    Assert.Eq(IniRead(paths.session, "Session", "Position", "?"), "1", "and its position")
 }
 
 Test_A10_Settings() {
@@ -365,6 +497,28 @@ Test_A10_Settings() {
     Assert.Eq(env.prefs.Get("DeliveryMode"), "Paste", "Type switches to Paste")
     env.ctl.ToggleDelivery()
     Assert.Eq(env.prefs.Get("DeliveryMode"), "Type", "Paste switches back to Type")
+
+    savedLog := Constants.ERROR_LOG
+    Constants.ERROR_LOG := "no-such-folder\error.log"   ; FileAppend does not create folders, so every log write fails
+    try {
+        ThrowingListener(kind) {
+            throw Error("listener failed", A_ThisFunc)
+        }
+        lst := ItemList()
+        lst.OnChange(ThrowingListener)
+        logPrefs := NewPrefs()
+        threw := 0
+        try {
+            logPrefs.Set("AdvanceMode", "Sideways")
+            lst.Load(["a"])
+        } catch Error {
+            threw := 1
+        }
+        Assert.Eq(threw, 0, "a failed error.log write never escapes a catch block")
+        Assert.Eq(logPrefs.Get("AdvanceMode") "/" lst.GetCount(), "None/1", "and the work still completes")
+    } finally {
+        Constants.ERROR_LOG := savedLog
+    }
 }
 
 Test_A11_Persistence() {
@@ -464,7 +618,7 @@ Test_A13_TrayState() {
     st := env.tray.BuildState({count: 0, position: 0, next: ""}, cfg, false, false)
     Assert.Eq(st.status, "No list loaded", "status with no list")
     Assert.Eq(st.enabled["back"] "" st.enabled["restart"] "" st.enabled["clear"], "000", "Step back, Restart and Clear are greyed with no list")
-    Assert.Eq(st.tip, "ListPaster — No list loaded", "tooltip with no list")
+    Assert.Eq(st.tip, "ListPaster " Constants.VERSION " — No list loaded", "tooltip with no list shows the name and version")
 
     st := env.tray.BuildState({count: 10, position: 4, next: "Cam-005"}, cfg, false, false)
     Assert.Eq(st.status, "Next: 5 of 10 · Tab · Type", "mid-list status shows the next item number and both modes")
@@ -504,10 +658,11 @@ Test_A13_TrayState() {
     env.items.Load(["a", "b", "c"])
     env.tray.Start()
     hMenu := A_TrayMenu.Handle
-    Assert.Eq(DllCall("GetMenuItemCount", "Ptr", hMenu), 18, "the tray menu has the planned 18 entries (separators included)")
+    Assert.Eq(DllCall("GetMenuItemCount", "Ptr", hMenu), 19, "the tray menu has the planned 19 entries (separators included)")
     Assert.Eq(MenuText(hMenu, 0) "/" MenuGreyed(hMenu, 0), "Next: 1 of 3 · None · Type/1", "the first item is the greyed status line")
     Assert.Eq(MenuGreyed(hMenu, 5) "/" MenuGreyed(hMenu, 6) "/" MenuGreyed(hMenu, 7), "1/1/0", "Step back and Restart are greyed at item 1; Clear is not")
-    Assert.Eq(MenuText(hMenu, 16) "/" MenuText(hMenu, 17), "Pause ListPaster/Exit", "Pause and Exit are at the bottom")
+    Assert.Eq(MenuText(hMenu, 8) "/" MenuGreyed(hMenu, 8), "Restore previous list/0", "Restore previous list follows Clear and is always enabled")
+    Assert.Eq(MenuText(hMenu, 17) "/" MenuText(hMenu, 18), "Pause ListPaster/Exit", "Pause and Exit are at the bottom")
     Assert.Eq(A_TrayMenu.Default, "Show list window", "double-clicking the icon opens the list window")
 
     env.items.Advance()
@@ -517,7 +672,7 @@ Test_A13_TrayState() {
 
     env.tray._OnToggle("RememberList")
     env.timer.Run("trayRefresh")
-    Assert.Eq(env.prefs.Get("RememberList") "/" MenuChecked(hMenu, 14), "1/1", "a toggle item flips its setting and shows a tick")
+    Assert.Eq(env.prefs.Get("RememberList") "/" MenuChecked(hMenu, 15), "1/1", "a toggle item flips its setting and shows a tick")
     env.tray._OnAdvance("Enter")
     env.tray._OnMode("Paste")
     Assert.Eq(env.prefs.Get("AdvanceMode") "/" env.prefs.Get("DeliveryMode"), "Enter/Paste", "the radio items change their settings")
@@ -525,11 +680,11 @@ Test_A13_TrayState() {
     env.hk.SetPaused(true)
     env.timer.Run("trayRefresh")
     Assert.Eq(MenuText(hMenu, 0), "Paused — Next: 2 of 3 · Enter · Paste", "the status line shows paused and the new modes")
-    Assert.Eq(MenuText(hMenu, 16), "Resume ListPaster", "the pause item becomes Resume")
+    Assert.Eq(MenuText(hMenu, 17), "Resume ListPaster", "the pause item becomes Resume")
     env.hk.SetPaused(false)
-    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+    for id in ["show", "generate", "load", "back", "restart", "clear", "restore", "exit"]
         env.tray._OnAction(id)
-    Assert.Eq(Join(env.ran), "show|generate|load|back|restart|clear|exit", "every menu action runs its callback")
+    Assert.Eq(Join(env.ran), "show|generate|load|back|restart|clear|restore|exit", "every menu action runs its callback")
 }
 
 Test_A14_Generator() {
@@ -615,6 +770,53 @@ Test_A16_HeldKeys() {
     Assert.Eq(snd.WaitForKeysUp("$^+NotAKey", 1), 0, "an unknown key name fails safely instead of typing")
 }
 
+Test_A17_RightClickStaleRow() {
+    items := ItemList()
+    win := TestListWindow(items, NewPrefs(), FakeTimer())
+    win._menu := FakeMenu()                        ; the real right-click handler runs; only the popup is faked
+    Aim(row) => win._OnContextMenu("", row, true, 0, 0)
+    LoadNew() => items.InsertAt(1, "new")         ; a copied list arriving while the prompt is open
+    AimAtC() => Aim(3)                             ; a second right-click while the prompt is open
+
+    items.Load(["a", "b", "c"]), Aim(2)
+    Assert.Eq(win._menuRow "/" win._menuRowText, "2/b", "a right-click remembers the clicked row and its text")
+    Assert.Eq(win._menu.shows "/" Join(win._menu.disabled), "1/", "the menu opens with every row action available")
+    Aim(0)
+    Assert.Eq(Join(win._menu.disabled), "Set as next|Edit...|Insert above...|Delete", "a right-click below the rows offers only Add to end")
+    items.Load(["a", "b", "c"]), Aim(2)
+    win.askReply := "X"
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "a|X|c", "Edit replaces the right-clicked row")
+
+    items.Load(["a", "b", "c"]), Aim(2)
+    win.onAsk := LoadNew
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Edit is skipped when the list changed during the prompt")
+    items.Load(["a", "b", "c"]), Aim(2)
+    win._OnMenuInsert()
+    Assert.Eq(Join(items.ToArray()), "new|a|b|c", "Insert is skipped when the list changed during the prompt")
+
+    items.Load(["a", "b", "c"]), Aim(2)
+    win.onAsk := AimAtC
+    win._OnMenuEdit()
+    Assert.Eq(Join(items.ToArray()), "a|X|c", "a right-click during the prompt doesn't redirect the edit")
+    win.onAsk := ""
+
+    items.Load(["a", "b", "c"]), Aim(2)
+    items.Remove(1)
+    win._OnMenuSetNext()
+    Assert.Eq(items.GetPosition(), 0, "Set as next is skipped when the row now holds another item")
+    win._OnMenuDelete()
+    Assert.Eq(Join(items.ToArray()), "b|c", "Delete is skipped when the row now holds another item")
+
+    Aim(2)
+    win._OnMenuSetNext()
+    Assert.Eq(items.GetPosition(), 1, "Set as next works on an unchanged row")
+    Aim(1)
+    win._OnMenuDelete()
+    Assert.Eq(Join(items.ToArray()), "c", "Delete works on an unchanged row")
+}
+
 ; =====================================================================================
 ; Builders
 ; =====================================================================================
@@ -658,7 +860,7 @@ NewTrayEnv() {
     env.timer := FakeTimer()
     env.ran := []
     env.actions := Map()
-    for id in ["show", "generate", "load", "back", "restart", "clear", "exit"]
+    for id in ["show", "generate", "load", "back", "restart", "clear", "restore", "exit"]
         env.actions[id] := ObjBindMethod(env.ran, "Push", id)
     env.tray := TrayMenu(env.items, env.prefs, env.hk, env.timer, env.actions)
     env.items.OnChange(ObjBindMethod(env.tray, "OnListChanged"))
@@ -681,6 +883,15 @@ StorePaths() {
     return {list: TestDir() "\list" count ".txt", session: TestDir() "\session" count ".ini"}
 }
 
+HotkeyExists(keyName) {
+    try {
+        Hotkey(keyName, , "On")
+        return 1
+    } catch Error {
+        return 0
+    }
+}
+
 Join(arr, sep := "|") {
     out := ""
     for i, value in arr
@@ -698,6 +909,10 @@ class FakeSender {
     keysHeld := false
     WaitForKeysUp(hotkey, timeoutS) {
         this.calls.Push("wait:" hotkey "/" timeoutS)
+        return !this.keysHeld
+    }
+    WaitForMainKeyUp(hotkey, timeoutS) {
+        this.calls.Push("waitmain:" hotkey "/" timeoutS)
         return !this.keysHeld
     }
     TypeText(text) {
@@ -808,12 +1023,19 @@ class FakeDelivery {
     restoreNowCalls := 0
     held := ""
     heldHotkeys := []
+    ownHeld := ""
+    waits := []
     __New(clip := "") {
         this.clip := clip
     }
     TargetProblem() => this.problem
+    OwnKeyProblem(hotkey) {
+        this.waits.Push("own:" hotkey ":" (A_IsCritical ? 1 : 0))
+        return this.ownHeld
+    }
     HeldKeysProblem(hotkey) {
         this.heldHotkeys.Push(hotkey)
+        this.waits.Push("held:" hotkey ":" (A_IsCritical ? 1 : 0))
         return this.held
     }
     Deliver(text, advanceMode, deliveryMode) {
@@ -837,12 +1059,44 @@ class FakeDelivery {
     }
 }
 
+; Right-click menu that records what it was asked to do (no popup).
+class FakeMenu {
+    shows := 0
+    disabled := []
+    Enable(name) {
+        for i, item in this.disabled {
+            if (item = name) {
+                this.disabled.RemoveAt(i)
+                return
+            }
+        }
+    }
+    Disable(name) {
+        this.Enable(name)
+        this.disabled.Push(name)
+    }
+    Show(*) {
+        this.shows += 1
+    }
+}
+
 ; ClipboardService with a controllable sequence number and clipboard text (no real clipboard access).
 class SeqClip extends ClipboardService {
     seq := 0
     text := ""
     SequenceNumber() => this.seq
     ReadText() => this.text
+}
+
+; ListWindow with a scripted prompt (no GUI): onAsk runs while the "prompt" is open.
+class TestListWindow extends ListWindow {
+    askReply := ""
+    onAsk := ""
+    _AskText(prompt, current) {
+        if HasMethod(this.onAsk)
+            this.onAsk.Call()
+        return this.askReply
+    }
 }
 
 ; =====================================================================================

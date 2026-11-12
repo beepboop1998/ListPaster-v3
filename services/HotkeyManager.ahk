@@ -1,14 +1,14 @@
 /*
     HotkeyManager.ahk
     Responsibility: register ListPaster's shortcuts (always-on core ones plus optional extras), report any that
-                    can't be set up, and pause/resume them all.
+                    can't be set up, run once-per-press ones only once per physical press, and pause/resume them all.
     Dependencies: Settings, Notifier
 */
 class HotkeyManager {
     ; --- Properties ---
     _prefs := ""          ; Settings
     _tips := ""           ; Notifier
-    _entries := []        ; {keys, label, fn, group: "core"|"extra", ok}
+    _entries := []        ; {keys, label, fn, group: "core"|"extra", ok, onePerPress, held, releaseOk, press, release}
     _paused := false
     _listeners := []      ; callables(paused)
 
@@ -21,12 +21,21 @@ class HotkeyManager {
     }
 
     ; --- Public Methods ---
-    Add(keys, label, fn, group) {
+    ; onePerPress: holding the shortcut runs it once; it runs again only after its main key has come up.
+    Add(keys, label, fn, group, onePerPress := false) {
         if (group != "core" && group != "extra")
             throw ValueError("group must be core or extra: " label, A_ThisFunc)
         if !HasMethod(fn)
             throw Error("Callback is not callable: " label, A_ThisFunc)
-        this._entries.Push({keys: keys, label: label, fn: fn, group: group, ok: false})
+        entry := {keys: keys, label: label, fn: fn, group: group, ok: false}
+        entry.onePerPress := onePerPress ? true : false
+        entry.held := false          ; a press ran and its main key hasn't been seen coming up yet
+        entry.releaseOk := false     ; the main key's release is watched; without it every launch runs
+        entry.press := ObjBindMethod(this, "_OnPress", entry)
+        entry.release := ObjBindMethod(this, "_OnRelease", entry)
+        if (!HasMethod(entry.press) || !HasMethod(entry.release))
+            throw Error("Failed to bind shortcut callbacks: " label, A_ThisFunc)
+        this._entries.Push(entry)
     }
 
     ; Registers every shortcut through the keyboard hook ($), so a program that registered the same combo
@@ -35,8 +44,10 @@ class HotkeyManager {
         extrasOn := (this._prefs.Get("ExtraHotkeys") = 1)
         failed := ""
         for entry in this._entries {
+            if entry.onePerPress
+                entry.releaseOk := this._WatchRelease(entry)
             try {
-                Hotkey("$" entry.keys, entry.fn, (entry.group = "core" || extrasOn) ? "On" : "Off")
+                Hotkey("$" entry.keys, entry.press, (entry.group = "core" || extrasOn) ? "On" : "Off")
                 entry.ok := true
             } catch Error as e {
                 this._LogError(A_ThisFunc, entry.label " (" entry.keys "): " e.Message)
@@ -79,6 +90,10 @@ class HotkeyManager {
             return
         }
         this._paused := paused
+        if !paused {
+            for entry in this._entries
+                entry.held := false          ; releases aren't seen while paused; don't swallow the next press
+        }
         for fn in this._listeners {
             try {
                 fn.Call(paused)
@@ -119,7 +134,40 @@ class HotkeyManager {
     }
 
     ; --- Private Methods ---
+    ; NOTE: while a shortcut's thread is Critical, AutoHotkey queues every key-repeat of it and starts each one
+    ; once that thread ends, when the key is already up. Holding the keys past the 3 s reminder starts a new
+    ; thread too. Either way the main key hasn't come up since the press that ran, so the launch is dropped.
+    _OnPress(entry, hotkeyName) {
+        if (entry.releaseOk && entry.held)
+            return
+        entry.held := entry.releaseOk
+        entry.fn.Call(hotkeyName)
+    }
+
+    _OnRelease(entry, *) {
+        entry.held := false
+    }
+
+    ; Registers a pass-through hotkey for the main key coming up, with any modifiers. True when it's watched.
+    _WatchRelease(entry) {
+        mainKey := RegExReplace(entry.keys, "[\^!+#*~$<>]")
+        if (mainKey = "" || InStr(mainKey, " "))
+            return false
+        try {
+            Hotkey("~*" mainKey " up", entry.release, "On")
+            return true
+        } catch Error as e {
+            this._LogError(A_ThisFunc, entry.label " (" entry.keys "): " e.Message)
+            return false
+        }
+    }
+
     _LogError(caller, message) {
-        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n", A_ScriptDir "\" Constants.ERROR_LOG)
+        line := FormatTime(, "yyyy-MM-dd HH:mm:ss") " ERROR [" caller "]: " message "`n"
+        try {
+            FileAppend(line, A_ScriptDir "\" Constants.ERROR_LOG)
+        } catch Error {
+            OutputDebug(Constants.APP_NAME " (error.log not writable) " line)   ; NOTE: runs inside catch blocks, so it must never throw
+        }
     }
 }
